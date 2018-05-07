@@ -65,11 +65,8 @@ steps:
     - name: '/v'
       path: '/workspace/google-cloud-cpp'
   dir: 'google-cloud-cpp'
-  id: 'create-docker-image'
-  waitFor:
-  - 'create-docker-build-image'
-  - 'docker-pull-prior-image'
-  - 'git-update-submodules'
+  id: 'run-build'
+  waitFor: [ 'create-docker-build-image', 'git-update-submodules' ]
 
 images:
 - 'gcr.io/$PROJECT_ID/build-with-${_DISTRO}-${_DISTRO_VERSION}'
