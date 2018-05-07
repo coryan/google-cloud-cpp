@@ -29,7 +29,7 @@ steps:
     '-f', 'Dockerfile.${_DISTRO}', '.' ]
   dir: 'google-cloud-cpp/ci'
   id: 'create-docker-build-image'
-  waitFor: [ 'git-clone', 'docker-pull-prior-build-image' ]
+  waitFor: [ 'docker-pull-prior-build-image' ]
 - name: gcr.io/cloud-builders/docker
   args: [
     'run',
