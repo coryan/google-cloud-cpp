@@ -22,8 +22,7 @@ steps:
   args: ['checkout', '${BRANCH_NAME}']
   id: 'git-clone'
 - name: gcr.io/cloud-builders/git
-  args: ['submodule', 'update', '--init', '--recursive',
-      'third_party/googletest', 'third_party/googleapis']
+  args: [ 'submodule', 'update', '--init', '--recursive' ]
   dir: 'google-cloud-cpp'
   id: 'git-update-submodules'
   waitFor: [ 'git-clone' ]
