@@ -41,7 +41,8 @@ steps:
   id: 'create-docker-build-image'
   waitFor: [ 'git-clone', 'docker-pull-prior-build-image' ]
 - name: gcr.io/cloud-builders/docker
-  args: ['run',
+  args: [
+    'run',
     '--env', 'PROJECT_ID=${PROJECT_ID}',
     '--cap-add', 'SYS_PTRACE',
     '--env', 'DISTRO="{_DISTRO}',
@@ -57,11 +58,9 @@ steps:
     '--env', 'CMAKE_FLAGS=${CMAKE_FLAGS:-}',
     '--env', 'CBT=/usr/local/google-cloud-sdk/bin/cbt',
     '--env', 'CBT_EMULATOR=/usr/local/google-cloud-sdk/platform/bigtable-emulator/cbtemulator',
-    '--env', 'TERM=${TERM:-dumb}',
     '--workdir', '/v',
     'gcr.io/$PROJECT_ID/build-with-${_DISTRO}-${_DISTRO_VERSION}',
-    '/v/ci/build-docker.sh'
-  ],
+    '/v/ci/build-docker.sh' ]
   volumes:
     - name: '/v'
       path: '/workspace/google-cloud-cpp'
