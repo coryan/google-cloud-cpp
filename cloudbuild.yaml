@@ -13,19 +13,10 @@
 # limitations under the License.
 
 steps:
-- name: gcr.io/cloud-builders/gcloud
-  args: ['source', 'repos', 'clone',
-    '--project=${PROJECT_ID}', '${REPO_NAME}', 'google-cloud-cpp'
-  ]
-- name: gcr.io/cloud-builders/git
-  dir: 'google-cloud-cpp'
-  args: ['checkout', '${BRANCH_NAME}']
-  id: 'git-clone'
 - name: gcr.io/cloud-builders/git
   args: [ 'submodule', 'update', '--init', '--recursive' ]
   dir: 'google-cloud-cpp'
   id: 'git-update-submodules'
-  waitFor: [ 'git-clone' ]
 - name: gcr.io/cloud-builders/docker
   args: ['pull', 'gcr.io/$PROJECT_ID/build-with-${_DISTRO}-${_DISTRO_VERSION}']
   id: 'docker-pull-prior-build-image'
