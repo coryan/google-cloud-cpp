@@ -1,0 +1,87 @@
+# Copyright 2018 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+steps:
+- name: gcr.io/cloud-builders/gcloud
+  args: ['source', 'repos', 'clone',
+    '--project=${PROJECT_ID}', '${REPO_NAME}', 'google-cloud-cpp'
+  ]
+- name: gcr.io/cloud-builders/git
+  dir: 'google-cloud-cpp'
+  args: ['checkout', '${BRANCH_NAME}']
+  id: 'git-clone'
+- name: gcr.io/cloud-builders/git
+  args: ['submodule', 'update', '--init', '--recursive',
+      'third_party/googletest', 'third_party/googleapis']
+  dir: 'google-cloud-cpp'
+  id: 'git-update-submodules'
+  waitFor: [ 'git-clone' ]
+- name: gcr.io/cloud-builders/docker
+  args: ['pull', 'gcr.io/$PROJECT_ID/build-with-${_DISTRO}-${_DISTRO_VERSION}']
+  id: 'docker-pull-prior-build-image'
+  waitFor: [ '-' ]
+- name: gcr.io/cloud-builders/docker
+  args: [ 'build',
+    '--cache-from', 'gcr.io/$PROJECT_ID/build-with-${_DISTRO}-${_DISTRO_VERSION}',
+    '--build-arg', 'DISTRO_VERSION=${_DISTRO_VERSION}',
+    '-t', 'gcr.io/$PROJECT_ID/build-${_DISTRO}-${_DISTRO_VERSION}',
+    '-f', 'Dockerfile.${_DISTRO}', '.' ]
+  dir: 'google-cloud-cpp/ci'
+  id: 'create-docker-build-image'
+  waitFor: [ 'git-clone', 'docker-pull-prior-build-image' ]
+- name: gcr.io/cloud-builders/docker
+  args: ['run',
+    '--env', 'PROJECT_ID=${PROJECT_ID}',
+    '--cap-add', 'SYS_PTRACE',
+    '--env', 'DISTRO="{_DISTRO}',
+    '--env', 'DISTRO_VERSION="${_DISTRO_VERSION}',
+    '--env', 'CC=${_CC}',
+    '--env', 'CXX=${_CXX}',
+    '--env', 'NCPU=8',
+    '--env', 'BUILD_TYPE="{BUILD_TYPE:-Release}',
+    '--env', 'CHECK_STYLE=${CHECK_STYLE:-}',
+    '--env', 'SCAN_BUILD=${SCAN_BUILD:-}',
+    '--env', 'GENERATE_DOCS=${GENERATE_DOCS:-}',
+    '--env', 'TEST_INSTALL=${TEST_INSTALL:-}',
+    '--env', 'CMAKE_FLAGS=${CMAKE_FLAGS:-}',
+    '--env', 'CBT=/usr/local/google-cloud-sdk/bin/cbt',
+    '--env', 'CBT_EMULATOR=/usr/local/google-cloud-sdk/platform/bigtable-emulator/cbtemulator',
+    '--env', 'TERM=${TERM:-dumb}',
+    '--workdir', '/v',
+    'gcr.io/$PROJECT_ID/build-with-${_DISTRO}-${_DISTRO_VERSION}',
+    '/v/ci/build-docker.sh'
+  ],
+  volumes:
+    - name: '/v'
+      path: '/workspace/google-cloud-cpp'
+  dir: 'google-cloud-cpp'
+  id: 'create-docker-image'
+  waitFor:
+  - 'create-docker-build-image'
+  - 'docker-pull-prior-image'
+  - 'git-update-submodules'
+
+images:
+- 'gcr.io/$PROJECT_ID/build-with-${_DISTRO}-${_DISTRO_VERSION}'
+
+options:
+  machineType: 'N1_HIGHCPU_8'
+
+timeout: 30m
+
+substitutions:
+  _DISTRO: 'ubuntu'
+  _DISTRO_VERSION: '18.04'
+  _CXX: g++
+  _CC: gcc
