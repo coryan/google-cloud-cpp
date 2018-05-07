@@ -58,12 +58,10 @@ steps:
     '--env', 'CMAKE_FLAGS=${CMAKE_FLAGS:-}',
     '--env', 'CBT=/usr/local/google-cloud-sdk/bin/cbt',
     '--env', 'CBT_EMULATOR=/usr/local/google-cloud-sdk/platform/bigtable-emulator/cbtemulator',
+    '--volume', '/workspace/google-cloud-cpp:/v',
     '--workdir', '/v',
     'gcr.io/$PROJECT_ID/build-with-${_DISTRO}-${_DISTRO_VERSION}',
     '/v/ci/build-docker.sh' ]
-  volumes:
-    - name: '/v'
-      path: '/workspace/google-cloud-cpp'
   dir: 'google-cloud-cpp'
   id: 'run-build'
   waitFor: [ 'create-docker-build-image', 'git-update-submodules' ]
