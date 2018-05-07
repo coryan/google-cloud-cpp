@@ -28,6 +28,15 @@ else
   readonly COLOR_RESET=$(tput sgr0)
 fi
 
+echo ${COLOR_RED}RED
+echo ${COLOR_GREEN}GREEN
+echo ${COLOR_YELLOW}YELLOW
+echo ${COLOR_RESET}
+echo DEBUG
+echo $PWD
+ls -l
+echo DEBUG
+
 # This script is supposed to run inside a Docker container, see
 # ci/build-linux.sh for the expected setup.  The /v directory is a volume
 # pointing to a (clean-ish) checkout of google-cloud-cpp:
