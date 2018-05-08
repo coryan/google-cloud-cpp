@@ -20,6 +20,7 @@ steps:
 - name: ubuntu
   args: [ 'ls', '-la' ]
   dir: 'google-cloud-cpp'
+  id: 'git-update-submodules' # TODO actually update the modules here.
 - name: gcr.io/cloud-builders/docker
   args: ['pull', 'gcr.io/$PROJECT_ID/build-with-${_DISTRO}-${_DISTRO_VERSION}']
   id: 'docker-pull-prior-build-image'
