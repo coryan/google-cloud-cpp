@@ -14,13 +14,15 @@
 
 steps:
 - name: ubuntu
+  args: [ '/usr/bin/env' ]
+- name: ubuntu
+  args: [ 'ls', '-la' ]
+- name: ubuntu
   args: [ 'ls', '-la' ]
   dir: 'google-cloud-cpp'
-  id: 'git-update-submodules'
 - name: gcr.io/cloud-builders/docker
   args: ['pull', 'gcr.io/$PROJECT_ID/build-with-${_DISTRO}-${_DISTRO_VERSION}']
   id: 'docker-pull-prior-build-image'
-  waitFor: [ '-' ]
 - name: gcr.io/cloud-builders/docker
   args: [ 'build',
     '--cache-from', 'gcr.io/$PROJECT_ID/build-with-${_DISTRO}-${_DISTRO_VERSION}',
@@ -62,7 +64,7 @@ images:
 options:
   machineType: 'N1_HIGHCPU_8'
 
-timeout: 30m
+timeout: 1800s
 
 substitutions:
   _DISTRO: 'ubuntu'
