@@ -1,0 +1,16 @@
+# Common build output directory names
+.build/
+_build/
+build-output/
+
+# Common bazel output directories
+bazel-*/
+
+# Ignore IDEA / IntelliJ files
+.idea/
+cmake-build-*/
+
+# This is a staging directory used to upload the documents to gihub.io
+github-io-staging/
+
+.git/
