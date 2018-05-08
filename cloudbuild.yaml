@@ -13,7 +13,7 @@
 # limitations under the License.
 
 steps:
-- name: gcr.io/cloud-builders/ubuntu
+- name: ubuntu
   args: [ 'ls', '-la' ]
   dir: 'google-cloud-cpp'
   id: 'git-update-submodules'
