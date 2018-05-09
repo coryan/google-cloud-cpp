@@ -14,7 +14,7 @@
 
 ARG DISTRO=ubuntu
 ARG DISTRO_VERSION=16.04
-FROM gcr.io/coryan-test/build-with-${DISTRO}-${DISTRO_VERSION}:latest AS baseline
+FROM cached-${DISTRO}-${DISTRO_VERSION}:tip AS baseline
 MAINTAINER "Carlos O'Ryan <coryan@google.com>"
 
 FROM baseline AS staging

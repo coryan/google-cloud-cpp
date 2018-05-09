@@ -17,7 +17,7 @@
 set(GOOGLE_CLOUD_CPP_GMOCK_PROVIDER "module"
         CACHE STRING "How to find the googlemock library")
 set_property(CACHE GOOGLE_CLOUD_CPP_GMOCK_PROVIDER
-        PROPERTY STRINGS "module" "package" "vcpkg" "pkg-config")
+        PROPERTY STRINGS "module" "package" "external" "vcpkg" "pkg-config")
 
 if ("${GOOGLE_CLOUD_CPP_GMOCK_PROVIDER}" STREQUAL "module")
     # Compile the googlemock library.  This library is rarely installed or
@@ -99,6 +99,52 @@ elseif ("${GOOGLE_CLOUD_CPP_GMOCK_PROVIDER}" STREQUAL "package")
             IMPORTED_LINK_INTERFACE_LIBRARIES "GMock::GMock;Threads::Threads"
             INTERFACE_INCLUDE_DIRECTORIES "${GMOCK_INCLUDE_DIRS}"
             IMPORTED_LOCATION "${GMOCK_MAIN_LIBRARY}")
+
+    # TODO(#310) - the name of this target can easily conflict, consider changing it.
+    add_library(gmock INTERFACE)
+    target_link_libraries(gmock INTERFACE GMock::Main GMock::GMock GTest::GTest)
+
+elseif ("${GOOGLE_CLOUD_CPP_GMOCK_PROVIDER}" STREQUAL "external")
+    find_package(Threads REQUIRED)
+
+    include(ExternalProject)
+    set(GOOGLETEST_SHA "d175c8bf823e709d570772b038757fadf63bc632")
+    ExternalProject_Add(googletest_project
+        PREFIX "${CMAKE_BINARY_DIR}/external/googletest"
+        URL https://github.com/google/googletest/archive/${GOOGLETEST_SHA}.tar.gz
+        URL_HASH SHA256=39a708e81cf68af02ca20cad879d1dbd055364f3ae5588a5743c919a51d7ad46
+        CONFIGURE_COMMAND "${CMAKE_COMMAND}" "-H<SOURCE_DIR>" "-B<BINARY_DIR>" "-DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>"
+        BUILD_COMMAND "${CMAKE_COMMAND}" --build "<BINARY_DIR>" --target all
+        INSTALL_COMMAND "${CMAKE_COMMAND}" --build "<BINARY_DIR>" --target install
+        LOG_DOWNLOAD ON
+        LOG_INSTALL ON)
+
+    ExternalProject_Get_Property(googletest_project INSTALL_DIR)
+
+    message("LIB_PREFIX = ${CMAKE_IMPORT_LIBRARY_PREFIX}")
+    function (__gmock_library_name VAR lib)
+        set(${VAR} "${INSTALL_DIR}/lib/lib${lib}.a" PARENT_SCOPE)
+    endfunction ()
+    __gmock_library_name(GMOCK_MAIN_LIBRARY gmock_main)
+    __gmock_library_name(GMOCK_LIBRARY gmock)
+    __gmock_library_name(GTEST_LIBRARY gtest)
+
+    add_dependencies(google-cloud-cpp-external-projects googletest_project)
+    add_library(GTest::GTest UNKNOWN IMPORTED)
+    set_target_properties(GTest::GTest PROPERTIES
+        IMPORTED_LINK_INTERFACE_LIBRARIES "Threads::Threads"
+        INTERFACE_INCLUDE_DIRECTORIES "${INSTALL_DIR}/include"
+        IMPORTED_LOCATION "${GTEST_LIBRARY}")
+    add_library(GMock::GMock UNKNOWN IMPORTED)
+    set_target_properties(GMock::GMock PROPERTIES
+        IMPORTED_LINK_INTERFACE_LIBRARIES "Threads::Threads"
+        INTERFACE_INCLUDE_DIRECTORIES "${INSTALL_DIR}/include"
+        IMPORTED_LOCATION "${GMOCK_LIBRARY}")
+    add_library(GMock::Main UNKNOWN IMPORTED)
+    set_target_properties(GMock::Main PROPERTIES
+        IMPORTED_LINK_INTERFACE_LIBRARIES "GMock::GMock;Threads::Threads"
+        INTERFACE_INCLUDE_DIRECTORIES "${INSTALL_DIR}/include"
+        IMPORTED_LOCATION "${GMOCK_MAIN_LIBRARY}")
 
     # TODO(#310) - the name of this target can easily conflict, consider changing it.
     add_library(gmock INTERFACE)

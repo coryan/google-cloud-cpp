@@ -48,6 +48,7 @@ include(GoogleCloudCppCommon)
 # users to add more common options without having to touch the code.
 add_library(storage_common_options INTERFACE)
 google_cloud_cpp_add_common_options(storage_common_options)
+add_dependencies(storage_common_options google-cloud-cpp-external-projects)
 
 # Enable unit tests
 enable_testing()

@@ -13,34 +13,9 @@
 # limitations under the License.
 
 steps:
-- name: ubuntu
-  args: [ '/usr/bin/env' ]
-- name: ubuntu
-  args: [ 'ls', '-la' ]
-- name: ubuntu
-  args: [ 'ls', '-la', '..' ]
-- name: ubuntu
-  args: [ 'ls', '-la', '/builder' ]
-- name: ubuntu
-  args: [ 'ls', '-la', '/builder/home' ]
-  id: 'git-update-submodules' # TODO actually update the modules here.
-- name: gcr.io/cloud-builders/docker
-  args: ['pull', 'gcr.io/$PROJECT_ID/build-with-${_DISTRO}-${_DISTRO_VERSION}']
-  id: 'docker-pull-prior-build-image-base'
-  waitFor: [ '-' ]
 - name: gcr.io/cloud-builders/docker
   args: ['pull', 'gcr.io/$PROJECT_ID/build-with-${_DISTRO}-${_DISTRO_VERSION}']
   id: 'docker-pull-prior-build-image'
-  waitFor: [ '-' ]
-- name: gcr.io/cloud-builders/docker
-  args: [ 'build',
-    '--cache-from', 'gcr.io/$PROJECT_ID/build-with-${_DISTRO}-${_DISTRO_VERSION}',
-    '--build-arg', 'DISTRO_VERSION=${_DISTRO_VERSION}',
-    '-t', 'gcr.io/$PROJECT_ID/build-${_DISTRO}-${_DISTRO_VERSION}',
-    '-f', 'Dockerfile.${_DISTRO}', '.' ]
-  dir: 'ci'
-  id: 'create-docker-build-image-base'
-  waitFor: [ 'docker-pull-prior-build-image-base' ]
 - name: gcr.io/cloud-builders/docker
   args: [ 'build',
     '--cache-from', 'gcr.io/$PROJECT_ID/build-with-${_DISTRO}-${_DISTRO_VERSION}',
@@ -49,7 +24,6 @@ steps:
     '-f', 'Dockerfile.${_DISTRO}', '.' ]
   dir: 'ci'
   id: 'create-docker-build-image'
-  waitFor: [ 'docker-pull-prior-build-image', 'create-docker-build-image-base' ]
 - name: gcr.io/cloud-builders/docker
   args: [
     'run',
@@ -73,7 +47,6 @@ steps:
     'gcr.io/$PROJECT_ID/build-with-${_DISTRO}-${_DISTRO_VERSION}',
     '/v/ci/build-docker.sh' ]
   id: 'run-build'
-  waitFor: [ 'create-docker-build-image', 'git-update-submodules' ]
 
 images:
 - 'gcr.io/$PROJECT_ID/build-with-${_DISTRO}-${_DISTRO_VERSION}'
@@ -90,7 +63,7 @@ substitutions:
   _CC: 'gcc'
   _BUILD_TYPE: 'Release'
   _CHECK_STYLE: ''
-  _CMAKE_FLAGS: '-DGOOGLE_CLOUD_CPP_GRPC_PROVIDER=package -DGOOGLE_CLOUD_CPP_GMOCK_PROVIDER=package'
+  _CMAKE_FLAGS: '-DGOOGLE_CLOUD_CPP_GRPC_PROVIDER=package -DGOOGLE_CLOUD_CPP_GMOCK_PROVIDER=external'
   _GENERATE_DOCS: ''
   _SCAN_BUILD: ''
   _TEST_INSTALL: ''

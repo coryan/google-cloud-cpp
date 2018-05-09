@@ -40,6 +40,7 @@ include(GoogleCloudCppCommon)
 # users to add more common options without having to touch the code.
 add_library(bigtable_common_options INTERFACE)
 google_cloud_cpp_add_common_options(bigtable_common_options)
+add_dependencies(bigtable_common_options google-cloud-cpp-external-projects)
 
 # Configure the location of proto files, particulary the googleapis protos.
 set(PROTOBUF_IMPORT_DIRS "${PROJECT_THIRD_PARTY_DIR}/googleapis" "${PROJECT_SOURCE_DIR}")
