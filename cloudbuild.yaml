@@ -34,7 +34,7 @@ steps:
     '--env', 'CC=${_CC}',
     '--env', 'CXX=${_CXX}',
     '--env', 'NCPU=8',
-    '--env', 'BUILD_TYPE="${_BUILD_TYPE}',
+    '--env', 'BUILD_TYPE=${_BUILD_TYPE}',
     '--env', 'CHECK_STYLE=${_CHECK_STYLE}',
     '--env', 'GENERATE_DOCS=${_GENERATE_DOCS}',
     '--env', 'SCAN_BUILD=${_SCAN_BUILD}',
@@ -51,14 +51,14 @@ steps:
 images:
 - 'gcr.io/$PROJECT_ID/build-with-${_DISTRO}-${_DISTRO_VERSION}'
 
-#options:
-#  machineType: 'N1_HIGHCPU_8'
+options:
+  machineType: 'N1_HIGHCPU_8'
 
 timeout: 3600s
 
 substitutions:
   _DISTRO: 'ubuntu-with-dependencies'
-  _DISTRO_VERSION: '18.04'
+  _DISTRO_VERSION: '16.04'
   _CXX: 'g++'
   _CC: 'gcc'
   _BUILD_TYPE: 'Release'
