@@ -48,9 +48,6 @@ steps:
     '/v/ci/build-docker.sh' ]
   id: 'run-build'
 
-images:
-- 'gcr.io/$PROJECT_ID/build-with-${_DISTRO}-${_DISTRO_VERSION}'
-
 options:
   machineType: 'N1_HIGHCPU_8'
 
