@@ -14,8 +14,10 @@
 
 ARG DISTRO=ubuntu
 ARG DISTRO_VERSION=16.04
-FROM cached-${DISTRO}-${DISTRO_VERSION}:tip AS staging
+FROM gcr.io/coryan-test/build-with-${DISTRO}-${DISTRO_VERSION} AS baseline
 MAINTAINER "Carlos O'Ryan <coryan@google.com>"
+
+FROM baseline AS staging
 
 ARG NCPU=2
 ARG CXX=clang++
@@ -69,7 +71,7 @@ RUN cmake \
 RUN cmake --build .build/grpc --target install -- -j ${NCPU}
 RUN make install-pkg-config_c install-pkg-config_cxx install-certs
 
-FROM cached-${DISTRO}-${DISTRO_VERSION}:tip
+FROM baseline
 COPY --from=staging /usr/local/include /usr/local/include
 COPY --from=staging /usr/local/bin /usr/local/bin
 COPY --from=staging /usr/local/lib /usr/local/lib

@@ -39,6 +39,8 @@ add_custom_target(doxygen-docs)
 # compiled with, obviously, scan-build disabled.
 add_custom_target(skip-scanbuild-targets)
 
+add_custom_target(google-cloud-cpp-external-projects)
+
 # Add subprojects here.
 add_subdirectory(bigtable)
 add_subdirectory(storage)
