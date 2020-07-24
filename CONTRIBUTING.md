@@ -223,6 +223,16 @@ $ DOCS_SUBDIR=my-fancy-feature ./ci/kokoro/docker/build.sh clang-tidy
 
 ### If you really must have DIFFBASE
 
-Create a branch, send a PR to merge your changes to master...
-Then create a second branch off the first one, and send a PR to merge into
-the *first* branch.
+Create a branch, let's call that `diffbase-demo-pr1` in this document.  Send a
+PR to merge `diffbase-demo-pr1` into `master`.
+
+Now create a second branch off the first one:
+
+```sh
+git checkout diffbase-demo-pr1
+git checkout -b diffbase-demo-pr2
+```
+
+Push that branch to your fork. And create a PR to merge `diffbase-demo-pr2`
+*into* `diffbase-demo-pr1`.
+
