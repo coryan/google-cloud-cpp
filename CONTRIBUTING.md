@@ -220,3 +220,9 @@ That is, the documentation will be publicly available at:
 ```console
 $ DOCS_SUBDIR=my-fancy-feature ./ci/kokoro/docker/build.sh clang-tidy
 ```
+
+### If you really must have DIFFBASE
+
+Create a branch, send a PR to merge your changes to master...
+Then create a second branch off the first one, and send a PR to merge into
+the *first* branch.
