@@ -116,6 +116,39 @@ void UseAccessTokenUntilExpired(google::cloud::iam::IAMCredentialsClient client,
   }
 }
 
+google::iam::credentials::v1::GenerateIdTokenResponse UseIdToken(
+    google::cloud::iam::IAMCredentialsClient client,
+    std::vector<std::string> const& argv) {
+  namespace iam = google::cloud::iam;
+  return [](iam::IAMCredentialsClient client,
+            std::string const& service_account, std::string const& project_id) {
+    google::protobuf::Duration duration;
+    duration.set_seconds(
+        std::chrono::seconds(2 * kTokenValidationPeriod).count());
+    auto token = client.GenerateIdToken(
+        "projects/-/serviceAccounts/" + service_account, /*delegates=*/{},
+        /*audience=*/{"https://www.googleapis.com/auth/cloud-platform"},
+        /*include_email=*/true);
+    if (!token) throw std::runtime_error(token.status().message());
+
+    std::cout << "token: " << token->token() << "\n";
+    namespace spanner = google::cloud::spanner;
+    auto credentials = grpc::CompositeChannelCredentials(
+        grpc::SslCredentials({}),
+        grpc::GoogleIAMCredentials(token->token(), "https://iam.googleapis.com/"));
+
+    spanner::InstanceAdminClient admin(spanner::MakeInstanceAdminConnection(
+        google::cloud::Options{}.set<google::cloud::GrpcCredentialOption>(
+            credentials)));
+    for (auto instance : admin.ListInstances(project_id, /*filter=*/{})) {
+      if (!instance) throw std::runtime_error(instance.status().message());
+      std::cout << "Instance: " << instance->name() << "\n";
+    }
+
+    return *std::move(token);
+  }(std::move(client), argv.at(0), argv.at(1));
+}
+
 void AutoRun(std::vector<std::string> const& argv) {
   namespace examples = ::google::cloud::testing_util;
   using google::cloud::internal::GetEnv;
@@ -173,6 +206,8 @@ int main(int argc, char* argv[]) {  // NOLINT(bugprone-exception-escape)
   Example example({
       make_entry("use-access-token", {"service-account", "project-id"},
                  UseAccessToken),
+      make_entry("use-id-token", {"service-account", "project-id"},
+                 UseIdToken),
       make_entry("use-access-token-until-expired",
                  {"service-account", "project-id"}, UseAccessTokenUntilExpired),
       {"auto", AutoRun},
