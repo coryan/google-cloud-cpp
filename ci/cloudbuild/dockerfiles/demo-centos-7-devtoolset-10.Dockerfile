@@ -33,25 +33,8 @@ RUN yum makecache && \
 RUN ln -sf /usr/bin/cmake3 /usr/bin/cmake && ln -sf /usr/bin/ctest3 /usr/bin/ctest
 # ```
 
-## [BEGIN IGNORED]
-# In order to use the `devtoolset-10` Software Collection we're supposed to run
-# `scl enable devtoolset-10 bash`, which starts a new shell with the environment
-# configured correctly. However, we can't do that in this Dockerfile, AND we
-# want the instructions that we generate for the user to say the right thing.
-# So this block is ignored, and we manually set some environment variables to
-# make the devtoolset-10 available. After this ignored block, we'll include the
-# correct instructions for the user. NOTE: These env values were obtained by
-# manually running the `scl ...` command (above) then copying the values set in
-# its environment.
-ENV PATH /opt/rh/devtoolset-10/root/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ENV LD_LIBRARY_PATH /opt/rh/devtoolset-10/root/usr/lib64:/opt/rh/devtoolset-10/root/usr/lib:/opt/rh/devtoolset-10/root/usr/lib64/dyninst:/opt/rh/devtoolset-10/root/usr/lib/dyninst:/opt/rh/devtoolset-10/root/usr/lib64:/opt/rh/devtoolset-10/root/usr/lib
-## [DONE IGNORED]
-# Start a bash shell with its environment configured to use the tools installed
-# by `devtoolset-10`.
-# **IMPORTANT**: All the following commands should be run from this new shell.
-# ```bash
-# scl enable devtoolset-10 bash
-# ```
+
+RUN scl enable devtoolset-10 bash
 
 # The following steps will install libraries and tools in `/usr/local`. By
 # default CentOS-7 does not search for shared libraries in these directories,
