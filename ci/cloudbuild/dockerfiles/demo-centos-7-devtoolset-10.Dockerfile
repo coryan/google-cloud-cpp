@@ -169,6 +169,30 @@ RUN curl -sSL https://github.com/nlohmann/json/archive/v3.9.1.tar.gz | \
 
 ## [DONE packaging.md]
 
+# Install googletest, remove the downloaded files and the temporary artifacts
+# after a successful build to keep the image smaller (and with fewer layers)
+WORKDIR /var/tmp/build/gtest
+RUN curl -sSL https://github.com/google/googletest/archive/release-1.10.0.tar.gz | \
+    tar -xzf - --strip-components=1 && \
+    cmake \
+      -DCMAKE_BUILD_TYPE="Release" \
+      -DBUILD_SHARED_LIBS=yes \
+      -H. -Bcmake-out/googletest && \
+    cmake --build cmake-out/googletest --target install -- -j ${NCPU} && \
+    ldconfig
+
+# Download and compile Google microbenchmark support library:
+WORKDIR /var/tmp/build/benchmark
+RUN curl -sSL https://github.com/google/benchmark/archive/v1.5.3.tar.gz | \
+    tar -xzf - --strip-components=1 && \
+    cmake \
+        -DCMAKE_BUILD_TYPE="Release" \
+        -DBUILD_SHARED_LIBS=yes \
+        -DBENCHMARK_ENABLE_TESTING=OFF \
+        -H. -Bcmake-out/benchmark && \
+    cmake --build cmake-out/benchmark --target install -- -j ${NCPU} && \
+    ldconfig
+
 # Some of the above libraries may have installed in /usr/local, so make sure
 # those library directories will be found.
 RUN ldconfig /usr/local/lib*
