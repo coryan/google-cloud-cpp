@@ -6,27 +6,100 @@
   "license": "Apache-2.0",
   "supports": "!uwp",
   "$TODO": "move `gtest` and `benchmark` to dev-dependencies",
-  "dependencies": [
-    "abseil",
-    "crc32c",
-    {
-      "name": "curl",
-      "features": [
-        "ssl"
+  "dependencies": [ "gtest", "benchmark" ],
+  "default-features": [
+    "bigtable",
+    "experimental-bigquery",
+    "experimental-logging",
+    "experimental-iam",
+    "pubsub",
+    "spanner",
+    "storage"
+  ],
+  "features": {
+    "googleapis": {
+      "description": "Selected proto and gRPC libraries from https://github.com/googleapis/googleapis",
+      "dependencies": [
+        "grpc",
+        "protobuf",
+        { "name": "grpc", "host":  true },
+        { "name": "protobuf", "host":  true },
+        { "name": "google-cloud-cpp", "features": [ "grpc-utils" ] }
       ]
     },
-    {
-      "name": "grpc",
-      "host": true
+    "grpc-utils": {
+      "description": "Common types and functions to implement gRPC-based libraries",
+      "dependencies": [
+        "abseil",
+        "grpc",
+        "protobuf",
+        { "name":  "google-cloud-cpp", "features":  [ "common"] }
+      ]
     },
-    {
-      "name": "protobuf",
-      "host": true
+    "common": {
+      "description": "Common types and functions shared by google-cloud-cpp libraries",
+      "dependencies": [ "abseil" ]
     },
-    "grpc",
-    "protobuf",
-    "nlohmann-json",
-    "benchmark",
-    "gtest"
-  ]
+    "bigtable": {
+      "description": "The Google Cloud Bigtable C++ client library",
+      "dependencies": [
+        "abseil",
+        { "name": "google-cloud-cpp", "features": [ "googleapis", "grpc-utils", "common" ] }
+      ]
+    },
+    "experimental-bigquery": {
+      "description": "The Google Cloud BigQuery C++ client library (Experimental)",
+      "dependencies": [
+        "abseil",
+        { "name": "google-cloud-cpp", "features": [ "googleapis", "grpc-utils", "common" ] }
+      ]
+    },
+    "experimental-logging": {
+      "description": "The Google Cloud Logging C++ client library (Experimental)",
+      "dependencies": [
+        "abseil",
+        { "name": "google-cloud-cpp", "features": [ "googleapis", "grpc-utils", "common" ] }
+      ]
+    },
+    "experimental-iam": {
+      "description": "The Google Cloud IAM C++ client library (Experimental)",
+      "dependencies": [
+        "abseil",
+        { "name": "google-cloud-cpp", "features": [ "googleapis", "grpc-utils", "common" ] }
+      ]
+    },
+    "pubsub": {
+      "description": "The Google Cloud Bigtable C++ client library",
+      "dependencies": [
+        "abseil",
+        { "name": "google-cloud-cpp", "features": [ "googleapis", "grpc-utils", "common" ] }
+      ]
+    },
+    "spanner": {
+      "description": "The Google Cloud Spanner C++ client library",
+      "dependencies": [
+        "abseil",
+        { "name": "google-cloud-cpp", "features": [ "googleapis", "grpc-utils", "common" ] }
+      ]
+    },
+    "storage": {
+      "description": "The Google Cloud Storage C++ client library",
+      "dependencies": [
+        "abseil",
+        "crc32c",
+        "nlohmann-json",
+        { "name": "curl", "features":  [ "ssl"] },
+        { "name":  "google-cloud-cpp", "features":  [ "common" ] }
+      ]
+    },
+    "experimental-storage-grpc": {
+      "description": "The GCS+gRPC plugin",
+      "dependencies": [
+        "abseil",
+        "crc32c",
+        "nlohmann-json",
+        { "name": "google-cloud-cpp", "features": [ "googleapis", "grpc-utils", "common", "storage" ] }
+      ]
+    }
+  }
 }
