@@ -27,6 +27,9 @@ namespace {
 
 using ::google::cloud::internal::GetEnv;
 using ::google::cloud::testing_util::IsOk;
+using ::testing::IsEmpty;
+using ::testing::IsNull;
+using ::testing::Not;
 
 class ObjectReadRangeIntegrationTest
     : public ::google::cloud::storage::testing::StorageIntegrationTest {
@@ -46,6 +49,36 @@ class ObjectReadRangeIntegrationTest
  private:
   std::string bucket_name_;
 };
+
+TEST_F(ObjectReadRangeIntegrationTest, Repro6516) {
+  StatusOr<Client> client = MakeIntegrationTestClient();
+  ASSERT_STATUS_OK(client);
+
+  auto constexpr kReportedLengthError = 126;
+  auto const contents = LoremIpsum().substr(0, kReportedLengthError);
+  ASSERT_EQ(contents.size(), kReportedLengthError);
+  auto const object_name = MakeRandomObjectName();
+
+  auto insert = client->InsertObject(bucket_name(), object_name, contents,
+                                     IfGenerationMatch(0));
+  ASSERT_THAT(insert, IsOk());
+  EXPECT_THAT(contents.size(), insert->size());
+
+  auto const size = static_cast<std::int64_t>(insert->size());
+   auto reader = client->ReadObject(bucket_name(), object_name,
+                                     ReadRange(0, size));
+  auto actual = std::string{std::istreambuf_iterator<char>(reader), {}};
+  EXPECT_TRUE(static_cast<bool>(reader));
+  EXPECT_FALSE(reader.IsOpen());
+  EXPECT_THAT(reader.status(), IsOk());
+  EXPECT_THAT(reader.status().message(), IsEmpty());
+  auto const* data = reader.status().message().data();
+  EXPECT_THAT(data, Not(IsNull()));
+  std::cout << "data: <" << data << ">\n";
+  EXPECT_EQ(std::string{}, std::string{data});
+
+  (void)client->DeleteObject(bucket_name(), object_name);
+}
 
 TEST_F(ObjectReadRangeIntegrationTest, ReadRangeSmall) {
   StatusOr<Client> client = MakeIntegrationTestClient();
