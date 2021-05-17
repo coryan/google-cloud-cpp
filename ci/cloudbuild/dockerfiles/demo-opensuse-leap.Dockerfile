@@ -164,3 +164,6 @@ RUN curl -sSL https://github.com/nlohmann/json/archive/v3.9.1.tar.gz | \
 # Some of the above libraries may have installed in /usr/local, so make sure
 # those library directories will be found.
 RUN ldconfig /usr/local/lib*
+
+RUN zypper refresh && \
+    zypper install --allow-downgrade -y ninja unzip zip
