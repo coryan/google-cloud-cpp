@@ -110,6 +110,9 @@ void PrintResults(TestResults const& results);
 
 google::cloud::StatusOr<ThroughputOptions> ParseArgs(int argc, char* argv[]);
 
+void AccumulateCounters(gcs_bm::ExperimentCounters& counters,
+                        TestResults const& results);
+
 }  // namespace
 
 using ::google::cloud::storage_experimental::DefaultGrpcClient;
@@ -204,12 +207,19 @@ int main(int argc, char* argv[]) {
 
   gcs_bm::PrintThroughputResultHeader(std::cout);
   std::vector<std::future<TestResults>> tasks;
+  gcs_bm::ExperimentCounters counters;
   for (int i = 0; i != options->thread_count; ++i) {
     tasks.emplace_back(std::async(std::launch::async, RunThread, *options,
                                   rest_client, grpc_client, bucket_name, i));
   }
   for (auto& f : tasks) {
-    PrintResults(f.get());
+    auto results = f.get();
+    PrintResults(results);
+    AccumulateCounters(counters, results);
+  }
+  std::cout << "# counters.size=" << counters.size() << "\n";
+  for (auto const& kv : counters) {
+    std::cout << "# counter " << kv.first << ": " << kv.second << "\n";
   }
 
   gcs_bm::DeleteAllObjects(rest_client, bucket_name, options->thread_count);
@@ -289,6 +299,7 @@ TestResults RunThread(ThroughputOptions const& options, gcs::Client rest_client,
 
   auto deadline = std::chrono::steady_clock::now() + options.duration;
 
+  gcs_bm::ExperimentCounters counters;
   TestResults results;
 
   std::int32_t iteration_count = 0;
@@ -332,12 +343,28 @@ TestResults RunThread(ThroughputOptions const& options, gcs::Client rest_client,
     if (options.thread_count == 1) {
       // Immediately print the results, this makes it easier to debug problems.
       PrintResults(results);
+      AccumulateCounters(counters, results);
       results.clear();
     }
 
     (void)rest_client.DeleteObject(bucket_name, object_name);
   }
+  if (options.thread_count == 1) {
+    std::cout << "# counters.size=" << counters.size() << "\n";
+    for (auto const& kv : counters) {
+      std::cout << "# counter " << kv.first << ": " << kv.second << "\n";
+    }
+  }
   return results;
+}
+
+void AccumulateCounters(gcs_bm::ExperimentCounters& counters,
+                        std::vector<gcs_bm::ThroughputResult> const& results) {
+  for (auto const& r : results) {
+    for (auto const& kv : r.counters) {
+      counters[kv.first] += kv.second;
+    }
+  }
 }
 
 google::cloud::StatusOr<ThroughputOptions> SelfTest(char const* argv0) {

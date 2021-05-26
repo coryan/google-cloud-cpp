@@ -67,12 +67,18 @@ TEST(ThroughputResult, HeaderMatches) {
   EXPECT_TRUE(header_stream);
   auto const header = std::move(header_stream).str();
 
-  auto const line = ToString(ThroughputResult{
-      kOpInsert, /*object_size=*/3 * kMiB,
-      /*app_buffer_size=*/2 * kMiB, /*lib_buffer_size=*/4 * kMiB,
-      /*crc_enabled=*/true, /*md5_enabled=*/false, ApiName::kApiGrpc,
-      std::chrono::microseconds(234000), std::chrono::microseconds(345000),
-      Status{StatusCode::kOutOfRange, "OOR-status-message"}});
+  auto const line = ToString(
+      ThroughputResult{kOpInsert,
+                       /*object_size=*/3 * kMiB,
+                       /*app_buffer_size=*/2 * kMiB,
+                       /*lib_buffer_size=*/4 * kMiB,
+                       /*crc_enabled=*/true,
+                       /*md5_enabled=*/false,
+                       ApiName::kApiGrpc,
+                       std::chrono::microseconds(234000),
+                       std::chrono::microseconds(345000),
+                       Status{StatusCode::kOutOfRange, "OOR-status-message"},
+                       {}});
   ASSERT_STATUS_OK(line);
   ASSERT_FALSE(header.empty());
   ASSERT_FALSE(line->empty());

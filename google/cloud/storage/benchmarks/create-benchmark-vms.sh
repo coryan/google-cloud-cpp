@@ -1,0 +1,190 @@
+#!/usr/bin/env bash
+# Copyright 2021 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Usage: create-becnhmark-vms.sh [options] regions
+#
+#   Options:
+#     --project=<project-id> The ID (or number) of the project
+#     --vm-name=<name>       The name of the VM created in each region
+#     --machine-type=<mtype> The VM machine type
+#     -h|--help            Print this help message
+#
+
+set -eu
+
+function print_usage() {
+  # Extracts the usage from the file comment starting at line 17.
+  sed -n '16,/^$/s/^# \?//p' "$0"
+}
+
+# Use getopt to parse and normalize all the args.
+PARSED="$(getopt -a \
+  --options="h" \
+  --longoptions="project:,vm-name:,vm-type:,help" \
+  --name="$(basename "$0")" \
+  -- "$@")"
+eval set -- "${PARSED}"
+
+GOOGLE_CLOUD_PROJECT=""
+VM_NAME="cloud-cpp-bm-01"
+VM_TYPE="c2-standard-16"
+while true; do
+  case "$1" in
+  --project)
+    GOOGLE_CLOUD_PROJECT="$2"
+    shift 2
+    ;;
+  --vm-name)
+    VM_NAME="$2"
+    shift 2
+    ;;
+  --vm-type)
+    VM_TYPE="$2"
+    shift 2
+    ;;
+  -h | --help)
+    print_usage
+    exit 0
+    ;;
+  --)
+    shift
+    break
+    ;;
+  esac
+done
+
+if [[ $# -eq 0 ]]; then
+  echo "No region specified"
+  print_usage
+  exit 1
+fi
+
+REGIONS=("${@}")
+
+count=0
+for region in "${REGIONS[@]}"; do
+  count=$((count + 1))
+  if gcloud compute networks subnets describe "direct-path" \
+    --project="${GOOGLE_CLOUD_PROJECT}" \
+    --region="${region}" --format='value(ipCidrRange)' >/dev/null 2>&1; then
+    echo "direct-path already exists in ${region}"
+  else
+    gcloud compute networks subnets create "direct-path" \
+      --project="${GOOGLE_CLOUD_PROJECT}" \
+      --network=default \
+      --private-ipv6-google-access-type=enable-outbound-vm-access \
+      --region="${region}" \
+      --range="10.32.${count}.0/24"
+    gcloud compute networks subnets list \
+      --project="${GOOGLE_CLOUD_PROJECT}" \
+      --filter="region:${region}"
+  fi
+done
+
+SOURCE_IMAGE=$(gcloud compute images list --filter='family:cos-stable' --format='value(name)')
+readonly SOURCE_IMAGE
+IMAGE="${SOURCE_IMAGE}-gvnic"
+readonly IMAGE
+
+if gcloud compute images describe "${IMAGE}" \
+    --project="${GOOGLE_CLOUD_PROJECT}" >/dev/null 2>&1; then
+  echo "vm image (${IMAGE}) already exists"
+else
+  gcloud compute images create "${IMAGE}" \
+    --project="${GOOGLE_CLOUD_PROJECT}" \
+    --source-image="${SOURCE_IMAGE}" \
+    --source-image-project="cos-cloud" \
+    --guest-os-features=GVNIC
+fi
+
+PROJECT_NUMBER="$(gcloud projects describe "${GOOGLE_CLOUD_PROJECT}" --format='value(projectNumber)')"
+readonly PROJECT_NUMBER
+
+for region in "${REGIONS[@]}"; do
+  zone="${region}-a"
+  if gcloud compute instances describe "${VM_NAME}" \
+    --project="${GOOGLE_CLOUD_PROJECT}" \
+    --zone="${zone}" >/dev/null 2>&1; then
+    echo "vm (${VM_NAME}) already exists in zone ${zone}"
+  else
+    echo "Creating instance ${VM_NAME} in zone ${zone} (machine type = ${VM_TYPE})"
+    gcloud compute instances create "${VM_NAME}" \
+      --project="${GOOGLE_CLOUD_PROJECT}" \
+      --machine-type="${VM_TYPE}" \
+      --zone="${zone}" \
+      --image="${IMAGE}" \
+      --network-interface="nic-type=GVNIC,subnet=direct-path" \
+      --network-tier=PREMIUM \
+      --maintenance-policy=MIGRATE \
+      --service-account="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+      --scopes="https://www.googleapis.com/auth/cloud-platform" \
+      --image-project="${GOOGLE_CLOUD_PROJECT}" \
+      --boot-disk-size="128GB" \
+      --boot-disk-type="pd-balanced" \
+      --boot-disk-device-name="${VM_NAME}" \
+      --no-shielded-secure-boot \
+      --shielded-vtpm \
+      --shielded-integrity-monitoring \
+      --reservation-affinity="any" \
+      --metadata enable-guest-attributes=TRUE \
+      --metadata-from-file user-data=<(
+        cat <<__EOF__
+#cloud-config
+
+write_files:
+- path: /etc/systemd/network/zz-default.network.d/ipv6.conf
+  permissions: 0644
+  owner: root
+  content: |
+    [Network]
+    DHCP=yes
+    IPv6AcceptRA=yes
+
+runcmd:
+- systemctl restart systemd-networkd
+__EOF__
+      )
+  fi
+done
+
+for region in "${REGIONS[@]}"; do
+  zone="${region}-a"
+  echo "Fetching host keys ${VM_NAME}"
+  id=$(gcloud compute instances describe "${VM_NAME}" \
+    --project="${GOOGLE_CLOUD_PROJECT}" \
+    --zone="${zone}" \
+    --format='value(id)')
+  set +e
+  delay=1
+  for _ in $(seq 1 8); do
+    if read -r key < <(gcloud compute instances get-guest-attributes "${VM_NAME}" \
+      --project="${GOOGLE_CLOUD_PROJECT}" \
+      --zone="${zone}" \
+      --query-path=hostkeys/ssh-rsa \
+      --format='value(value)'); then
+      break
+    fi
+    delay=$((delay * 2))
+    echo "cannot fetch key, trying again in ${delay} seconds"
+    sleep $delay
+  done
+  set -e
+  echo "compute.${id} ssh-rsa ${key}" >>"${HOME}/.ssh/google_compute_known_hosts"
+  echo "Enabling GCR on ${VM_NAME}"
+  gcloud compute ssh --project="${GOOGLE_CLOUD_PROJECT}" --zone="${zone}" "${VM_NAME}" \
+    -- -o 'ProxyCommand=corp-ssh-helper %h %p' docker-credential-gcr configure-docker </dev/null
+done
+
+gcloud compute config-ssh --verbosity=none --project="${GOOGLE_CLOUD_PROJECT}"

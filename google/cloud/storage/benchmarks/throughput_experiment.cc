@@ -80,7 +80,8 @@ class UploadObject : public ThroughputExperiment {
                               api_,
                               usage.elapsed_time,
                               usage.cpu_time,
-                              object_metadata.status()};
+                              object_metadata.status(),
+                              {}};
     }
     auto timer = Timer::PerThread();
     auto writer = client_.WriteObject(
@@ -107,7 +108,8 @@ class UploadObject : public ThroughputExperiment {
                             api_,
                             usage.elapsed_time,
                             usage.cpu_time,
-                            writer.metadata().status()};
+                            writer.metadata().status(),
+                            {}};
   }
 
  private:
@@ -147,6 +149,13 @@ class DownloadObject : public ThroughputExperiment {
          num_read += reader.gcount()) {
     }
     auto const usage = timer.Sample();
+    auto const& headers = reader.headers();
+    ExperimentCounters counters;
+    for (auto const* key : {"x-goog-grpc-context-peer", "server"}) {
+      auto loc = headers.find(key);
+      if (loc == headers.end()) continue;
+      counters[loc->first + "/" + loc->second] = 1;
+    }
     return ThroughputResult{config.op,
                             config.object_size,
                             config.app_buffer_size,
@@ -156,7 +165,8 @@ class DownloadObject : public ThroughputExperiment {
                             api_,
                             usage.elapsed_time,
                             usage.cpu_time,
-                            reader.status()};
+                            reader.status(),
+                            std::move(counters)};
   }
 
  private:
@@ -237,7 +247,8 @@ class DownloadObjectLibcurl : public ThroughputExperiment {
                             api_,
                             usage.elapsed_time,
                             usage.cpu_time,
-                            status};
+                            status,
+                            {}};
   }
 
  private:
@@ -300,6 +311,8 @@ class DownloadObjectRawGrpc : public ThroughputExperiment {
         ::google::cloud::MakeStatusFromRpcError(stream->Finish());
     auto const usage = timer.Sample();
 
+    ExperimentCounters counters;
+    counters["x-goog-grpc-context-peer/" + context.peer()] = 1;
     return ThroughputResult{config.op,
                             config.object_size,
                             config.app_buffer_size,
@@ -309,7 +322,8 @@ class DownloadObjectRawGrpc : public ThroughputExperiment {
                             ApiName::kApiRawGrpc,
                             usage.elapsed_time,
                             usage.cpu_time,
-                            status};
+                            status,
+                            std::move(counters)};
   }
 
  private:

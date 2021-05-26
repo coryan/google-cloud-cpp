@@ -45,6 +45,7 @@ void ObjectReadStreambuf::Close() {
   auto response = source_->Close();
   if (!response.ok()) {
     ReportError(std::move(response).status());
+    return;
   }
 }
 
@@ -199,9 +200,10 @@ std::streamsize ObjectReadStreambuf::xsgetn(char* s, std::streamsize count) {
   offset += read_result->bytes_received;
   source_pos_ += read_result->bytes_received;
 
+  auto hint = headers_.end();
   for (auto const& kv : read_result->response.headers) {
     hash_validator_->ProcessHeader(kv.first, kv.second);
-    headers_.emplace(kv.first, kv.second);
+    hint = headers_.emplace_hint(hint, kv.first, kv.second);
   }
   if (read_result->response.status_code >= HttpStatusCode::kMinNotSuccess) {
     return run_validator_if_closed(AsStatus(read_result->response));

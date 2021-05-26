@@ -16,8 +16,10 @@
 #define GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_STORAGE_BENCHMARKS_THROUGHPUT_RESULT_H
 
 #include "google/cloud/storage/benchmarks/benchmark_utils.h"
+#include <unordered_map>
 #include <chrono>
 #include <cstdint>
+#include <string>
 
 namespace google {
 namespace cloud {
@@ -46,6 +48,9 @@ enum OpType {
   /// This was the third download of this object in the experiment.
   kOpRead2,
 };
+
+/// Defines a structure to hold arbitrary counters for each experiment.
+using ExperimentCounters = std::unordered_map<std::string, std::uint64_t>;
 
 /**
  * The result of running a throughput benchmark iteration.
@@ -81,6 +86,9 @@ struct ThroughputResult {
   /// The result of the operation. The analysis may need to discard failed
   /// uploads or downloads.
   google::cloud::Status status;
+
+  /// Any counters associated with the experiment
+  ExperimentCounters counters;
 };
 
 /// Print @p r as a CSV line.
