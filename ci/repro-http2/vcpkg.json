@@ -1,0 +1,9 @@
+{
+  "name": "repro-http2",
+  "description": "Reproduce problems with HTTP/2 and GCS",
+  "$comment": "Facilitate local development with vcpkg",
+  "version-string": "unversioned",
+  "dependencies": [
+    "google-cloud-cpp"
+  ]
+}
