@@ -39,7 +39,7 @@ if (-not (Test-Path $bazel_root)) {
 $common_flags = @("--output_user_root=${bazel_root}")
 
 Write-Host -ForegroundColor Yellow "`n$(Get-Date -Format o) Capture Bazel information for troubleshooting"
-$Env:USE_BAZEL_VERSION="4.0.0"
+$Env:USE_BAZEL_VERSION="4.1.0"
 bazelisk $common_flags version
 
 # Shutdown the Bazel server to release any locks
@@ -55,17 +55,21 @@ if (Test-Path env:TEMP) {
 }
 Write-Host -ForegroundColor Yellow "`n$(Get-Date -Format o) Using ${download_dir} as download directory"
 
-Write-Host -ForegroundColor Yellow "`n$(Get-Date -Format o) Disk(s) size and space for troubleshooting"
-Get-CimInstance -Class CIM_LogicalDisk | `
-    Select-Object -Property DeviceID, DriveType, VolumeName, `
-        @{L='FreeSpaceGB';E={"{0:N2}" -f ($_.FreeSpace /1GB)}}, `
-        @{L="Capacity";E={"{0:N2}" -f ($_.Size/1GB)}}
+function Write-Free-Disk-Space {
+    Write-Host -ForegroundColor Yellow "`n$(Get-Date -Format o) Disk(s) size and space for troubleshooting"
+    Get-CimInstance -Class CIM_LogicalDisk | `
+        Select-Object -Property DeviceID, DriveType, VolumeName, `
+            @{L='FreeSpaceGB';E={"{0:N2}" -f ($_.FreeSpace /1GB)}}, `
+            @{L="Capacity";E={"{0:N2}" -f ($_.Size/1GB)}}
+    
+    Write-Host -ForegroundColor Yellow "`n$(Get-Date -Format o) Bazel Root (${bazel_root}) size"
+    Get-Item -ErrorAction SilentlyContinue "${bazel_root}"  | `
+        Get-ChildItem -ErrorAction SilentlyContinue -Recurse | `
+        Measure-Object -ErrorAction SilentlyContinue -Sum Length | `
+        Select-Object Count, @{L="SizeGB";E={"{0:N2}" -f ($_.Sum / 1GB)}}    
+}
 
-Write-Host -ForegroundColor Yellow "`n$(Get-Date -Format o) Bazel Root (${bazel_root}) size"
-Get-Item -ErrorAction SilentlyContinue "${bazel_root}"  | `
-    Get-ChildItem -ErrorAction SilentlyContinue -Recurse | `
-    Measure-Object -ErrorAction SilentlyContinue -Sum Length | `
-    Select-Object Count, @{L="SizeGB";E={"{0:N2}" -f ($_.Sum / 1GB)}}
+Write-Free-Disk-Space
 
 $build_flags = @(
     "--keep_going",
@@ -77,6 +81,17 @@ $build_flags = @(
     # Disable warnings on generated proto files.
     "--per_file_copt=.*\.pb\.cc@/wd4244"
 )
+
+$excluded_rules = @()
+
+if ($BuildName.Contains("-release")) {
+    $build_flags += ("-c", "opt")
+}
+
+if ($BuildName.StartsWith("bazel-x86-")) {
+    $build_flags += ("--cpu=x64_x86_windows")
+    $excluded_rules += ("-//generator/...")
+}
 
 $BAZEL_CACHE="https://storage.googleapis.com/cloud-cpp-bazel-cache"
 
@@ -91,10 +106,6 @@ if ((Test-Path env:KOKORO_GFILE_DIR) -and
     # See https://docs.bazel.build/versions/main/remote-caching.html#known-issues
     # and https://github.com/bazelbuild/bazel/issues/3360
     $build_flags += @("--experimental_guard_against_concurrent_changes")
-}
-
-if ($BuildName -eq "bazel-release") {
-    $build_flags += ("-c", "opt")
 }
 
 $env:BAZEL_VC="C:\Program Files (x86)\Microsoft Visual Studio\${env:MSVC_VERSION}\Community\VC"
@@ -123,21 +134,21 @@ $test_flags = $build_flags
 $test_flags += @("--test_output=errors", "--verbose_failures=true")
 
 Write-Host -ForegroundColor Yellow "`n$(Get-Date -Format o) Compiling and running unit tests"
-bazelisk $common_flags test $test_flags --test_tag_filters=-integration-test ...
+bazelisk $common_flags test $test_flags --test_tag_filters=-integration-test -- ... $excluded_rules
 if ($LastExitCode) {
     Write-Host -ForegroundColor Red "bazel test failed with exit code ${LastExitCode}."
     Exit ${LastExitCode}
 }
 
 Write-Host -ForegroundColor Yellow "`n$(Get-Date -Format o) Compiling extra programs"
-Write-Host -ForegroundColor Yellow bazel $common_flags build $build_flags ...
-bazelisk $common_flags build $build_flags ...
+Write-Host -ForegroundColor Yellow bazel $common_flags build $build_flags -- ... $excluded_rules
+bazelisk $common_flags build $build_flags ... $excluded_rules
 if ($LastExitCode) {
     Write-Host -ForegroundColor Red "bazel test failed with exit code ${LastExitCode}."
     Exit ${LastExitCode}
 }
 
-function Integration-Tests-Enabled {
+function Test-Enabled-Integration-Tests {
     if ((Test-Path env:KOKORO_GFILE_DIR) -and
         (Test-Path "${env:KOKORO_GFILE_DIR}/kokoro-run-key.json") -and
         (Test-Path "${env:KOKORO_GFILE_DIR}/kokoro-run-key.p12")) {
@@ -147,7 +158,7 @@ function Integration-Tests-Enabled {
 }
 
 $PROJECT_ROOT = (Get-Item -Path ".\" -Verbose).FullName
-if (Integration-Tests-Enabled) {
+if (Test-Enabled-Integration-Tests) {
     Write-Host -ForegroundColor Yellow "`n$(Get-Date -Format o) Running integration tests $env:CONFIG"
     $integration_tests_config="${PROJECT_ROOT}/ci/etc/integration-tests-config.ps1"
     . "${integration_tests_config}"
@@ -212,7 +223,7 @@ if (Integration-Tests-Enabled) {
         "--test_env=GOOGLE_CLOUD_CPP_IAM_INVALID_TEST_SERVICE_ACCOUNT=${env:GOOGLE_CLOUD_CPP_IAM_INVALID_TEST_SERVICE_ACCOUNT}",
         "--test_env=GOOGLE_CLOUD_CPP_STORAGE_TEST_ROOTS_PEM=${env:GRPC_DEFAULT_SSL_ROOTS_FILE_PATH}"
     )
-    $excluded_rules=@(
+    $excluded_rules += (
         "-//google/cloud/bigtable/examples:bigtable_grpc_credentials",
         "-//google/cloud/storage/examples:storage_service_account_samples",
         "-//google/cloud/storage/tests:service_account_integration_test",
@@ -233,16 +244,6 @@ Write-Host -ForegroundColor Yellow "`n$(Get-Date -Format o) Shutting down Bazel 
 bazelisk $common_flags shutdown
 bazelisk shutdown
 
-Write-Host -ForegroundColor Yellow "`n$(Get-Date -Format o) Disk(s) size and space for troubleshooting"
-Get-CimInstance -Class CIM_LogicalDisk | `
-    Select-Object -Property DeviceID, DriveType, VolumeName, `
-        @{L='FreeSpaceGB';E={"{0:N2}" -f ($_.FreeSpace /1GB)}}, `
-        @{L="Capacity";E={"{0:N2}" -f ($_.Size/1GB)}}
-
-Write-Host -ForegroundColor Yellow "`n$(Get-Date -Format o) Bazel Root (${bazel_root}) size"
-Get-Item -ErrorAction SilentlyContinue "${bazel_root}"  | `
-    Get-ChildItem -ErrorAction SilentlyContinue -Recurse | `
-    Measure-Object -ErrorAction SilentlyContinue -Sum Length | `
-    Select-Object Count, @{L="SizeGB";E={"{0:N2}" -f ($_.Sum / 1GB)}}
+Write-Free-Disk-Space
 
 Write-Host -ForegroundColor Yellow "`n$(Get-Date -Format o) DONE"
