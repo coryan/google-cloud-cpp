@@ -120,13 +120,14 @@ for region in "${REGIONS[@]}"; do
     echo "vm (${VM_NAME}) already exists in zone ${zone}"
   else
     echo "Creating instance ${VM_NAME} in zone ${zone} (machine type = ${VM_TYPE})"
-    gcloud compute instances create "${VM_NAME}" \
+    gcloud beta compute instances create "${VM_NAME}" \
       --project="${GOOGLE_CLOUD_PROJECT}" \
       --machine-type="${VM_TYPE}" \
       --zone="${zone}" \
       --image="${IMAGE}" \
       --network-interface="nic-type=GVNIC,subnet=direct-path" \
       --network-tier=PREMIUM \
+      --network-performance-configs=total-egress-bandwidth-tier=TIER_1 \
       --maintenance-policy=MIGRATE \
       --service-account="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
       --scopes="https://www.googleapis.com/auth/cloud-platform" \
@@ -152,7 +153,21 @@ write_files:
     DHCP=yes
     IPv6AcceptRA=yes
 
+- path: /etc/systemd/system/config-firewall.service
+  permissions: 0644
+  owner: root
+  content: |
+    [Unit]
+    Description=Enable IPerf Port on VM
+
+    [Service]
+    Type=oneshot
+    RemainAfterExit=true
+    ExecStart=/sbin/iptables -A INPUT -p tcp --dport 5001 -j ACCEPT
+
 runcmd:
+- systemctl daemon-reload
+- systemctl start config-firewall.service
 - systemctl restart systemd-networkd
 __EOF__
       )
