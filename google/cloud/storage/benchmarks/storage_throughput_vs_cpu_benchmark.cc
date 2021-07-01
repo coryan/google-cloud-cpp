@@ -18,11 +18,13 @@
 #include "google/cloud/storage/benchmarks/throughput_result.h"
 #include "google/cloud/storage/client.h"
 #include "google/cloud/storage/grpc_plugin.h"
+#include "google/cloud/grpc_options.h"
 #include "google/cloud/internal/absl_str_join_quiet.h"
 #include "google/cloud/internal/build_info.h"
 #include "google/cloud/internal/format_time_point.h"
 #include "google/cloud/internal/getenv.h"
 #include "google/cloud/internal/random.h"
+#include "google/cloud/options.h"
 #include <future>
 #include <set>
 #include <sstream>
@@ -128,7 +130,10 @@ int main(int argc, char* argv[]) {
       google::cloud::Options{}.set<gcs::ProjectIdOption>(options->project_id);
   auto rest_client = gcs::Client(client_options);
 #if GOOGLE_CLOUD_CPP_STORAGE_HAVE_GRPC
-  auto grpc_client = DefaultGrpcClient(client_options);
+  auto grpc_client =
+      DefaultGrpcClient(google::cloud::Options(client_options)
+                            .set<google::cloud::GrpcNumChannelsOption>(
+                                std::max(4, options->thread_count / 2)));
 #else
   auto grpc_client = rest_client;
 #endif  // GOOGLE_CLOUD_CPP_STORAGE_HAVE_GRPC
