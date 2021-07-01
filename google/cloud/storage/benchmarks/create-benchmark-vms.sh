@@ -125,7 +125,8 @@ for region in "${REGIONS[@]}"; do
       --machine-type="${VM_TYPE}" \
       --zone="${zone}" \
       --image="${IMAGE}" \
-      --network-interface="nic-type=GVNIC,subnet=direct-path" \
+      --network-interface="nic-type=GVNIC" \
+      --private-ipv6-google-access-type=enable-outbound-vm-access \
       --network-tier=PREMIUM \
       --network-performance-configs=total-egress-bandwidth-tier=TIER_1 \
       --maintenance-policy=MIGRATE \
