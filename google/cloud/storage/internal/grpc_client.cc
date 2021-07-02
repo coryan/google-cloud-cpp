@@ -66,7 +66,7 @@ bool DirectPathEnabled() {
 int DefaultGrpcNumChannels() {
   auto constexpr kMinimumChannels = 4;
   auto const count = std::thread::hardware_concurrency();
-  return (std::max)(kMinimumChannels, static_cast<int>(count));
+  return (std::max)(kMinimumChannels, static_cast<int>(count) / 4);
 }
 
 Options DefaultOptionsGrpc(Options options) {
@@ -101,6 +101,7 @@ std::shared_ptr<grpc::Channel> CreateGrpcChannel(
   args.SetInt("grpc.channel_id", channel_id);
   if (DirectPathEnabled()) {
     args.SetServiceConfigJSON(kDirectPathConfig);
+    args.SetInt("grpc.dns_enable_srv_queries", 1);
   }
   return auth.CreateChannel(options.get<EndpointOption>(), std::move(args));
 }
