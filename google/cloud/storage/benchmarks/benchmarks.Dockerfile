@@ -117,7 +117,7 @@ RUN cmake -S . -B .build -GNinja \
     -DCMAKE_BUILD_TYPE=Release \
     -DGOOGLE_CLOUD_CPP_STORAGE_ENABLE_GRPC=ON \
     && cmake --build .build --target storage_storage_throughput_vs_cpu_benchmark \
-    && cmake --build .build --target storage_aggregate_throughput_vs_cpu_benchmark \
+    && cmake --build .build --target storage_aggregate_throughput_benchmark \
     && cmake --build .build --target storage_create_dataset \
     && cmake --build .build --target storage_shard_throughput_benchmark
 
