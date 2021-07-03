@@ -112,6 +112,51 @@ fi
 PROJECT_NUMBER="$(gcloud projects describe "${GOOGLE_CLOUD_PROJECT}" --format='value(projectNumber)')"
 readonly PROJECT_NUMBER
 
+COMMON_INSTANCE_FLAGS=(
+  # Enable Google Direct Access (aka Direct Path) over IPv6
+  --private-ipv6-google-access-type=enable-outbound-vm-access
+
+  # Enable higher bandwidth for c2-*-60 VMs, note that this requires `gcloud **beta** compute`
+  --network-performance-configs=total-egress-bandwidth-tier=TIER_1
+
+  # Use the premium network tier.
+  #  DISABLED --network-tier=PREMIUM
+
+  # This is the recommended network driver to get better performance
+  # on GCE VMs.
+  --network-interface="nic-type=GVNIC"
+
+  # Create the VM in the desired project
+  --project="${GOOGLE_CLOUD_PROJECT}"
+
+  # Configure the VM to use the Google Compute Engine default service account
+  --service-account="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+
+  # Use the image created (or found) above, note that this image
+  # must support GVNIC, and must have the "GVNIC guest OS feature"
+  # enabled.
+  --image-project="${GOOGLE_CLOUD_PROJECT}"
+  --image="${IMAGE}"
+
+  # Use the prescribed VM machine type
+  --machine-type="${VM_TYPE}"
+
+  # Normal options which should have very little impact on network performance, most
+  # of these are cargo-culted from the console.cloud.google.com defaults.
+  --maintenance-policy=MIGRATE
+  --scopes="https://www.googleapis.com/auth/cloud-platform"
+  --boot-disk-size="128GB"
+  --boot-disk-type="pd-balanced"
+  --no-shielded-secure-boot
+  --shielded-vtpm
+  --shielded-integrity-monitoring
+  --reservation-affinity="any"
+
+  # We will fetch the ssh keys using metadata attributes.
+  --metadata enable-guest-attributes=TRUE
+)
+readonly COMMON_INSTANCE_FLAGS
+
 for region in "${REGIONS[@]}"; do
   zone="${region}-a"
   if gcloud compute instances describe "${VM_NAME}" \
@@ -121,26 +166,9 @@ for region in "${REGIONS[@]}"; do
   else
     echo "Creating instance ${VM_NAME} in zone ${zone} (machine type = ${VM_TYPE})"
     gcloud beta compute instances create "${VM_NAME}" \
-      --project="${GOOGLE_CLOUD_PROJECT}" \
-      --machine-type="${VM_TYPE}" \
       --zone="${zone}" \
-      --image="${IMAGE}" \
-      --network-interface="nic-type=GVNIC" \
-      --private-ipv6-google-access-type=enable-outbound-vm-access \
-      --network-tier=PREMIUM \
-      --network-performance-configs=total-egress-bandwidth-tier=TIER_1 \
-      --maintenance-policy=MIGRATE \
-      --service-account="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
-      --scopes="https://www.googleapis.com/auth/cloud-platform" \
-      --image-project="${GOOGLE_CLOUD_PROJECT}" \
-      --boot-disk-size="128GB" \
-      --boot-disk-type="pd-balanced" \
+      "${COMMON_INSTANCE_FLAGS[@]}" \
       --boot-disk-device-name="${VM_NAME}" \
-      --no-shielded-secure-boot \
-      --shielded-vtpm \
-      --shielded-integrity-monitoring \
-      --reservation-affinity="any" \
-      --metadata enable-guest-attributes=TRUE \
       --metadata-from-file user-data=<(
         cat <<__EOF__
 #cloud-config
