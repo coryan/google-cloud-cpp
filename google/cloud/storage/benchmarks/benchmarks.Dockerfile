@@ -118,8 +118,7 @@ RUN cmake -S . -B .build -GNinja \
     -DGOOGLE_CLOUD_CPP_STORAGE_ENABLE_GRPC=ON \
     && cmake --build .build --target storage_storage_throughput_vs_cpu_benchmark \
     && cmake --build .build --target storage_aggregate_throughput_benchmark \
-    && cmake --build .build --target storage_create_dataset \
-    && cmake --build .build --target storage_shard_throughput_benchmark
+    && cmake --build .build --target storage_create_dataset
 
 WORKDIR /var/tmp/build/dp_check
 RUN curl -sSL -o dp_check https://github.com/GoogleCloudPlatform/grpc-gcp-tools/releases/download/v1.3/dp_check
