@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Usage: create-becnhmark-vms.sh [options] regions
+# Usage: create-becnhmark-vms.sh [options] zones
 #
 #   Options:
 #     --project=<project-id> The ID (or number) of the project
-#     --vm-name=<name>       The name of the VM created in each region
+#     --vm-name=<name>       The name of the VM created in each zone
 #     --machine-type=<mtype> The VM machine type
-#     -h|--help            Print this help message
+#     -h|--help              Print this help message
 #
 
 set -eu
@@ -66,15 +66,17 @@ while true; do
 done
 
 if [[ $# -eq 0 ]]; then
-  echo "No region specified"
+  echo "No zones specified"
   print_usage
   exit 1
 fi
 
-REGIONS=("${@}")
+ZONES=("${@}")
 
 count=0
-for region in "${REGIONS[@]}"; do
+for zone in "${ZONES[@]}"; do
+  region="$(gcloud compute zones describe "${zone}" \
+    --project="${GOOGLE_CLOUD_PROJECT}" --format='value(region)' | xargs basename)"
   count=$((count + 1))
   if gcloud compute networks subnets describe "direct-path" \
     --project="${GOOGLE_CLOUD_PROJECT}" \
@@ -141,6 +143,9 @@ COMMON_INSTANCE_FLAGS=(
   # Use the prescribed VM machine type
   --machine-type="${VM_TYPE}"
 
+  # We will fetch the ssh keys using metadata attributes.
+  --metadata enable-guest-attributes=TRUE
+
   # Normal options which should have very little impact on network performance, most
   # of these are cargo-culted from the console.cloud.google.com defaults.
   --maintenance-policy=MIGRATE
@@ -151,14 +156,10 @@ COMMON_INSTANCE_FLAGS=(
   --shielded-vtpm
   --shielded-integrity-monitoring
   --reservation-affinity="any"
-
-  # We will fetch the ssh keys using metadata attributes.
-  --metadata enable-guest-attributes=TRUE
 )
 readonly COMMON_INSTANCE_FLAGS
 
-for region in "${REGIONS[@]}"; do
-  zone="${region}-a"
+for zone in "${ZONES[@]}"; do
   if gcloud compute instances describe "${VM_NAME}" \
     --project="${GOOGLE_CLOUD_PROJECT}" \
     --zone="${zone}" >/dev/null 2>&1; then
@@ -203,8 +204,7 @@ __EOF__
   fi
 done
 
-for region in "${REGIONS[@]}"; do
-  zone="${region}-a"
+for zone in "${ZONES[@]}"; do
   echo "Fetching host keys ${VM_NAME}"
   id=$(gcloud compute instances describe "${VM_NAME}" \
     --project="${GOOGLE_CLOUD_PROJECT}" \
