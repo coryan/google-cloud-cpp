@@ -83,6 +83,50 @@ TEST_F(ObjectMediaIntegrationTest, StreamingReadClose) {
   EXPECT_STATUS_OK(stream.status());
 }
 
+TEST_F(ObjectMediaIntegrationTest, StreamingReadAndQuery) {
+  StatusOr<Client> client = MakeIntegrationTestClient();
+  ASSERT_STATUS_OK(client);
+
+  auto object_name = MakeRandomObjectName();
+
+  // Construct a large object, or at least large enough that it is not
+  // downloaded in the first chunk.
+  auto const contents = MakeRandomData(2 * 1024 * 1024);
+  auto source_meta = client->InsertObject(
+      bucket_name_, object_name, contents, IfGenerationMatch(0));
+  ASSERT_STATUS_OK(source_meta);
+  ScheduleForDelete(*source_meta);
+
+  // Create an iostream to read the object back.
+  auto stream = client->ReadObject(bucket_name_, object_name);
+  auto meta = client->GetObjectMetadata(bucket_name_, object_name);
+  EXPECT_STATUS_OK(meta);
+  EXPECT_TRUE(stream.good()) << "stream.status=" << stream.status();
+  auto const actual = std::string{std::istreambuf_iterator<char>{stream}, {}};
+  EXPECT_STATUS_OK(stream.status());
+}
+
+TEST_F(ObjectMediaIntegrationTest, ShortStreamingReadAndQuery) {
+  StatusOr<Client> client = MakeIntegrationTestClient();
+  ASSERT_STATUS_OK(client);
+
+  auto object_name = MakeRandomObjectName();
+
+  auto const contents = LoremIpsum();
+  auto source_meta = client->InsertObject(
+      bucket_name_, object_name, contents, IfGenerationMatch(0));
+  ASSERT_STATUS_OK(source_meta);
+  ScheduleForDelete(*source_meta);
+
+  // Create an iostream to read the object back.
+  auto stream = client->ReadObject(bucket_name_, object_name);
+  auto meta = client->GetObjectMetadata(bucket_name_, object_name);
+  EXPECT_STATUS_OK(meta);
+  EXPECT_TRUE(stream.good()) << "stream.status=" << stream.status();
+  auto const actual = std::string{std::istreambuf_iterator<char>{stream}, {}};
+  EXPECT_STATUS_OK(stream.status());
+}
+
 /// @test Read a portion of a relatively large object using the JSON API.
 TEST_F(ObjectMediaIntegrationTest, ReadRangeJSON) {
   // The emulator always requires multiple iterations to copy this object.
