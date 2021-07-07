@@ -98,10 +98,11 @@ Options DefaultOptionsGrpc(Options options) {
 std::shared_ptr<grpc::Channel> CreateGrpcChannel(
     GrpcAuthenticationStrategy& auth, Options const& options, int channel_id) {
   grpc::ChannelArguments args;
-  args.SetInt("grpc.channel_id", channel_id);
   if (DirectPathEnabled()) {
     args.SetServiceConfigJSON(kDirectPathConfig);
     args.SetInt("grpc.dns_enable_srv_queries", 1);
+  } else {
+    args.SetInt("grpc.channel_id", channel_id);
   }
   return auth.CreateChannel(options.get<EndpointOption>(), std::move(args));
 }
