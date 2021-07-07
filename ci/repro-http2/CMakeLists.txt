@@ -22,3 +22,6 @@ find_package(google_cloud_cpp_storage REQUIRED)
 
 add_executable(repro-http2 repro-http2.cc)
 target_link_libraries(repro-http2 google-cloud-cpp::storage)
+
+add_executable(repro-curl-easy-pause-error repro-curl-easy-pause-error.cc)
+target_link_libraries(repro-curl-easy-pause-error google-cloud-cpp::storage)

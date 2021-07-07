@@ -161,15 +161,15 @@ RUN curl -sSL https://curl.haxx.se/download/curl-7.77.0.tar.gz \
     && cmake --build cmake-out \
     && cmake --install cmake-out
 
-FROM devtools AS build
-
 WORKDIR /var/tmp/build/google-cloud-cpp
-RUN curl -sSL https://github.com/googleapis/google-cloud-cpp/archive/v1.28.0.tar.gz | tar -xzf - --strip-components=1
+RUN curl -sSL https://github.com/googleapis/google-cloud-cpp/archive/v1.29.0.tar.gz | tar -xzf - --strip-components=1
 RUN cmake -DCMAKE_BUILD_TYPE=Debug \
         -DGOOGLE_CLOUD_CPP_STORAGE_ENABLE_GRPC=ON \
         -S . -B cmake-out -GNinja \
     && cmake --build cmake-out \
     && cmake --install cmake-out
+
+FROM devtools AS build
 
 WORKDIR /var/tmp/build/repro
 COPY . /var/tmp/build/repro
@@ -185,4 +185,5 @@ RUN apk update \
 
 WORKDIR /r
 COPY --from=build /var/tmp/build/repro/cmake-out/repro-http2 /r/
+COPY --from=build /var/tmp/build/repro/cmake-out/repro-curl-easy-pause-error /r/
 COPY --from=build /var/tmp/build/google-cloud-cpp/cmake-out/google/cloud/storage/benchmarks/*_benchmark /r/
