@@ -142,8 +142,10 @@ int main(int argc, char* argv[]) {
     auto channels = options->grpc_channel_count;
     if (channels == 0) channels = (std::max)(options->thread_count / 4, 4);
     client = DefaultGrpcClient(
-        google::cloud::Options{}.set<google::cloud::GrpcNumChannelsOption>(
-            channels));
+        google::cloud::Options{}
+            .set<google::cloud::GrpcNumChannelsOption>(channels)
+            .set<google::cloud::storage_experimental::GrpcPluginOption>(
+                options->grpc_plugin_config));
   }
 #endif  // GOOGLE_CLOUD_CPP_STORAGE_HAVE_GRPC
   std::vector<gcs::ObjectMetadata> objects;
@@ -219,7 +221,8 @@ int main(int argc, char* argv[]) {
   auto timer = Timer::PerProcess();
   auto usage = timer.Sample();
   for (auto now = clock::now(); now < deadline; now = clock::now()) {
-    std::this_thread::sleep_until((std::min)(now + options->reporting_interval, deadline));
+    std::this_thread::sleep_until(
+        (std::min)(now + options->reporting_interval, deadline));
     usage = timer.Sample();
     std::cout << current_time() << "," << accumulate_bytes_received() << ","
               << usage.cpu_time.count() << std::endl;
