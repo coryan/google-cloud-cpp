@@ -16,6 +16,7 @@
 #include "google/cloud/storage/internal/hash_validator_impl.h"
 #include "google/cloud/storage/internal/object_requests.h"
 #include "google/cloud/storage/object_metadata.h"
+#include "google/cloud/internal/absl_str_join_quiet.h"
 #include "absl/memory/memory.h"
 
 namespace google {
@@ -23,6 +24,17 @@ namespace cloud {
 namespace storage {
 inline namespace STORAGE_CLIENT_NS {
 namespace internal {
+namespace {
+std::string FormatHashValues(HashValidator::HashValues const& values) {
+  if (values.size() == 1) return values.begin()->second;
+
+  using KV = HashValidator::HashValues::value_type;
+  auto formatter = [](std::string* out, KV const& p) {
+    *out += p.first + "=" + p.second;
+  };
+  return absl::StrJoin(values, ", ", formatter);
+}
+}  // namespace
 
 void CompositeValidator::Update(char const* buf, std::size_t n) {
   left_->Update(buf, n);
@@ -44,10 +56,10 @@ HashValidator::Result CompositeValidator::Finish() && {
   auto left_result = std::move(*left_).Finish();
   auto right_result = std::move(*right_).Finish();
 
-  auto received = left_->Name() + "=" + left_result.received;
-  received += "," + right_->Name() + "=" + right_result.received;
-  auto computed = left_->Name() + "=" + left_result.computed;
-  computed += "," + right_->Name() + "=" + right_result.computed;
+  auto received = std::move(left_result.received);
+  received.insert(right_result.received.begin(), right_result.received.end());
+  auto computed = std::move(left_result.computed);
+  computed.insert(right_result.computed.begin(), right_result.computed.end());
   bool is_mismatch = left_result.is_mismatch || right_result.is_mismatch;
   return Result{std::move(received), std::move(computed), is_mismatch};
 }
@@ -87,6 +99,14 @@ std::unique_ptr<HashValidator> CreateHashValidator(
   auto disable_crc32c = request.HasOption<DisableCrc32cChecksum>() &&
                         request.GetOption<DisableCrc32cChecksum>().value();
   return CreateHashValidator(disable_md5, disable_crc32c);
+}
+
+std::string FormatReceivedHashes(HashValidator::Result const& result) {
+  return FormatHashValues(result.received);
+}
+
+std::string FormatComputedHashes(HashValidator::Result const& result) {
+  return FormatHashValues(result.computed);
 }
 
 }  // namespace internal

@@ -16,6 +16,7 @@
 #define GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_STORAGE_INTERNAL_HASH_VALIDATOR_H
 
 #include "google/cloud/storage/version.h"
+#include <map>
 #include <memory>
 #include <string>
 
@@ -45,11 +46,12 @@ class HashValidator {
   virtual void ProcessHeader(std::string const& key,
                              std::string const& value) = 0;
 
+  using HashValues = std::map<std::string, std::string>;
   struct Result {
     /// The value reported by the server, based on the calls to ProcessHeader().
-    std::string received;
+    HashValues received;
     /// The value computed locally, based on the calls to Update().
-    std::string computed;
+    HashValues computed;
     /// A flag indicating of this is considered a mismatch based on the rules
     /// for the validator.
     bool is_mismatch;
@@ -129,6 +131,14 @@ std::unique_ptr<HashValidator> CreateHashValidator(
 std::unique_ptr<HashValidator> CreateHashValidator(
     ResumableUploadRequest const& request);
 /* @} */
+
+//@{
+/**
+ * Helper functions to make hashes human readable.
+ */
+std::string FormatReceivedHashes(HashValidator::Result const& result);
+std::string FormatComputedHashes(HashValidator::Result const& result);
+//@}
 
 }  // namespace internal
 }  // namespace STORAGE_CLIENT_NS

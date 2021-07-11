@@ -62,8 +62,16 @@ HashValidator::Result MD5HashValidator::Finish() && {
   std::string hash(MD5_DIGEST_LENGTH, ' ');
   MD5_Final(reinterpret_cast<unsigned char*>(&hash[0]), &context_);
   auto computed = Base64Encode(hash);
-  bool is_mismatch = !received_hash_.empty() && (received_hash_ != computed);
-  return Result{std::move(received_hash_), std::move(computed), is_mismatch};
+  if (received_hash_.empty()) {
+    // No hash received implies no mismatch. Hashes may be missing for any
+    // number of reasons: composites do not have MD5 hashes, partial downloads
+    // don't include hashes, etc.
+    return Result{HashValues{}, HashValues{{Name(), std::move(computed)}},
+                  false};
+  }
+  auto const is_mismatch = (received_hash_ != computed);
+  return Result{HashValues{{Name(), std::move(received_hash_)}},
+                HashValues{{Name(), std::move(computed)}}, is_mismatch};
 }
 
 void Crc32cHashValidator::Update(char const* buf, std::size_t n) {
@@ -103,8 +111,16 @@ void Crc32cHashValidator::ProcessHeader(std::string const& key,
 HashValidator::Result Crc32cHashValidator::Finish() && {
   std::string const hash = google::cloud::internal::EncodeBigEndian(current_);
   auto computed = Base64Encode(hash);
-  bool is_mismatch = !received_hash_.empty() && (received_hash_ != computed);
-  return Result{std::move(received_hash_), std::move(computed), is_mismatch};
+  if (received_hash_.empty()) {
+    // No hash received implies no mismatch. Hashes may be missing for any
+    // number of reasons: composites do not have MD5 hashes, partial downloads
+    // don't include hashes, etc.
+    return Result{HashValues{}, HashValues{{Name(), std::move(computed)}},
+                  false};
+  }
+  auto const is_mismatch = (received_hash_ != computed);
+  return Result{HashValues{{Name(), std::move(received_hash_)}},
+                HashValues{{Name(), std::move(computed)}}, is_mismatch};
 }
 
 }  // namespace internal

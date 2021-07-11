@@ -65,12 +65,8 @@ class ObjectReadStreambuf : public std::basic_streambuf<char> {
   bool IsOpen() const;
   void Close();
   Status const& status() const { return status_; }
-  std::string const& received_hash() const {
-    return hash_validator_result_.received;
-  }
-  std::string const& computed_hash() const {
-    return hash_validator_result_.computed;
-  }
+  std::string const& received_hash() const { return received_hash_; }
+  std::string const& computed_hash() const { return computed_hash_; }
   std::multimap<std::string, std::string> const& headers() const {
     return headers_;
   }
@@ -78,6 +74,7 @@ class ObjectReadStreambuf : public std::basic_streambuf<char> {
  private:
   int_type ReportError(Status status);
   void SetEmptyRegion();
+  std::string FinishValidator(char const* function_name);
   StatusOr<int_type> Peek();
 
   int_type underflow() override;
@@ -88,6 +85,8 @@ class ObjectReadStreambuf : public std::basic_streambuf<char> {
   std::vector<char> current_ios_buffer_;
   std::unique_ptr<HashValidator> hash_validator_;
   HashValidator::Result hash_validator_result_;
+  std::string received_hash_;
+  std::string computed_hash_;
   Status status_;
   std::multimap<std::string, std::string> headers_;
 };
@@ -119,12 +118,8 @@ class ObjectWriteStreambuf : public std::basic_streambuf<char> {
   virtual bool IsOpen() const;
   virtual bool ValidateHash(ObjectMetadata const& meta);
 
-  virtual std::string const& received_hash() const {
-    return hash_validator_result_.received;
-  }
-  virtual std::string const& computed_hash() const {
-    return hash_validator_result_.computed;
-  }
+  virtual std::string const& received_hash() const { return received_hash_; }
+  virtual std::string const& computed_hash() const { return computed_hash_; }
 
   /// The session id, if applicable, it is empty for non-resumable uploads.
   virtual std::string const& resumable_session_id() const {
@@ -177,6 +172,8 @@ class ObjectWriteStreambuf : public std::basic_streambuf<char> {
   AutoFinalizeConfig auto_finalize_ = AutoFinalizeConfig::kDisabled;
 
   HashValidator::Result hash_validator_result_;
+  std::string received_hash_;
+  std::string computed_hash_;
 
   StatusOr<ResumableUploadResponse> last_response_;
 };

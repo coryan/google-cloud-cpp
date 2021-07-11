@@ -99,25 +99,10 @@ ObjectReadStreambuf::int_type ObjectReadStreambuf::underflow() {
   }
 
   if (*next_char == traits_type::eof()) {
-    hash_validator_result_ = std::move(*hash_validator_).Finish();
+    auto msg = FinishValidator(__func__);
     if (hash_validator_result_.is_mismatch) {
-      std::string msg;
-      msg += __func__;
-      msg += "(): mismatched hashes in download";
-      msg += " computed=";
-      msg += hash_validator_result_.computed;
-      msg += " received=";
-      msg += hash_validator_result_.received;
-      if (status_.ok()) {
-        // If there is an existing error, we should report that instead because
-        // it is more specific, for example, every permanent network error will
-        // produce invalid checksums, but that is not the interesting
-        // information.
-        status_ = Status(StatusCode::kDataLoss, msg);
-      }
 #if GOOGLE_CLOUD_CPP_HAVE_EXCEPTIONS
-      throw HashMismatchError(msg, hash_validator_result_.received,
-                              hash_validator_result_.computed);
+      throw HashMismatchError(std::move(msg), received_hash_, computed_hash_);
 #else
       return traits_type::eof();
 #endif  // GOOGLE_CLOUD_CPP_HAVE_EXCEPTIONS
@@ -142,34 +127,18 @@ std::streamsize ObjectReadStreambuf::xsgetn(char* s, std::streamsize count) {
     if (IsOpen()) {
       return offset;
     }
-    hash_validator_result_ = std::move(*hash_validator_).Finish();
-    if (!hash_validator_result_.is_mismatch) {
-      return offset;
-    }
-    std::string msg;
-    msg += function_name;
-    msg += "(): mismatched hashes in download";
-    msg += ", computed=";
-    msg += hash_validator_result_.computed;
-    msg += ", received=";
-    msg += hash_validator_result_.received;
-    if (status_.ok()) {
-      // If there is an existing error, we should report that instead because
-      // it is more specific, for example, every permanent network error will
-      // produce invalid checksums, but that is not the interesting information.
-      status_ = Status(StatusCode::kDataLoss, msg);
-    }
-    // The only way to report errors from a std::basic_streambuf<> (which this
-    // class derives from) is to throw exceptions:
-    //   https://stackoverflow.com/questions/50716688/how-to-set-the-badbit-of-a-stream-by-a-customized-streambuf
-    // but we need to be able to report errors when the application has disabled
-    // exceptions via `-fno-exceptions` or a similar option. In that case we set
-    // `status_`, and report the error as an 0-byte read. This is obviously not
-    // ideal, but it is the best we can do when the application disables the
-    // standard mechanism to signal errors.
+    auto msg = FinishValidator(function_name);
+    if (!hash_validator_result_.is_mismatch) return offset;
+      // The only way to report errors from a std::basic_streambuf<> (which this
+      // class derives from) is to throw exceptions:
+      //   https://stackoverflow.com/questions/50716688/how-to-set-the-badbit-of-a-stream-by-a-customized-streambuf
+      // but we need to be able to report errors when the application has
+      // disabled exceptions via `-fno-exceptions` or a similar option. In that
+      // case we set `status_`, and report the error as an 0-byte read. This is
+      // obviously not ideal, but it is the best we can do when the application
+      // disables the standard mechanism to signal errors.
 #if GOOGLE_CLOUD_CPP_HAVE_EXCEPTIONS
-    throw HashMismatchError(msg, hash_validator_result_.received,
-                            hash_validator_result_.computed);
+    throw HashMismatchError(std::move(msg), received_hash_, computed_hash_);
 #else
     return std::streamsize(0);
 #endif  // GOOGLE_CLOUD_CPP_HAVE_EXCEPTIONS
@@ -236,6 +205,28 @@ void ObjectReadStreambuf::SetEmptyRegion() {
   setg(data, data + 1, data + 1);
 }
 
+std::string ObjectReadStreambuf::FinishValidator(char const* function_name) {
+  hash_validator_result_ = std::move(*hash_validator_).Finish();
+  received_hash_ = FormatReceivedHashes(hash_validator_result_);
+  computed_hash_ = FormatComputedHashes(hash_validator_result_);
+  if (!hash_validator_result_.is_mismatch) return {};
+
+  std::string msg;
+  msg += function_name;
+  msg += "(): mismatched hashes in download";
+  msg += ", computed=";
+  msg += computed_hash_;
+  msg += ", received=";
+  msg += received_hash_;
+  if (status_.ok()) {
+    // If there is an existing error, we should report that instead because
+    // it is more specific, for example, every permanent network error will
+    // produce invalid checksums, but that is not the interesting information.
+    status_ = Status(StatusCode::kDataLoss, msg);
+  }
+  return msg;
+}
+
 ObjectWriteStreambuf::ObjectWriteStreambuf(
     std::unique_ptr<ResumableUploadSession> upload_session,
     std::size_t max_buffer_size, std::unique_ptr<HashValidator> hash_validator,
@@ -293,6 +284,8 @@ bool ObjectWriteStreambuf::IsOpen() const {
 bool ObjectWriteStreambuf::ValidateHash(ObjectMetadata const& meta) {
   hash_validator_->ProcessMetadata(meta);
   hash_validator_result_ = std::move(*hash_validator_).Finish();
+  received_hash_ = FormatReceivedHashes(hash_validator_result_);
+  computed_hash_ = FormatComputedHashes(hash_validator_result_);
   return !hash_validator_result_.is_mismatch;
 }
 
