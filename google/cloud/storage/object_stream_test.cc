@@ -39,11 +39,9 @@ ObjectWriteStream CreateWriter() {
   auto session = absl::make_unique<internal::ResumableUploadSessionError>(
       Status(StatusCode::kNotFound, "test-message"));
 
-  auto validator = absl::make_unique<internal::NullHashValidator>();
-
   ObjectWriteStream writer(absl::make_unique<internal::ObjectWriteStreambuf>(
-      std::move(session), 0, std::move(validator),
-      AutoFinalizeConfig::kEnabled));
+      std::move(session), 0, internal::CreateNullHashFunction(),
+      internal::CreateNullHashValidator(), AutoFinalizeConfig::kEnabled));
   writer.setstate(std::ios::badbit | std::ios::eofbit);
   writer.Close();
   return writer;
