@@ -16,10 +16,11 @@
 # Usage: create-becnhmark-vms.sh [options] zones
 #
 #   Options:
-#     --project=<project-id> The ID (or number) of the project
-#     --vm-name=<name>       The name of the VM created in each zone
-#     --machine-type=<mtype> The VM machine type
-#     -h|--help              Print this help message
+#     --project=<project-id>     The ID (or number) of the project
+#     --vm-name=<name>           The name of the VM created in each zone
+#     --vm-type=<mtype>          The VM machine type
+#     --image-family=<family>    The VM image family to baseline from
+#     -h|--help                  Print this help message
 #
 
 set -eu
@@ -32,7 +33,7 @@ function print_usage() {
 # Use getopt to parse and normalize all the args.
 PARSED="$(getopt -a \
   --options="h" \
-  --longoptions="project:,vm-name:,vm-type:,help" \
+  --longoptions="project:,vm-name:,vm-type:,image-family:,help" \
   --name="$(basename "$0")" \
   -- "$@")"
 eval set -- "${PARSED}"
@@ -40,6 +41,7 @@ eval set -- "${PARSED}"
 GOOGLE_CLOUD_PROJECT=""
 VM_NAME="cloud-cpp-bm-01"
 VM_TYPE="c2-standard-16"
+IMAGE_FAMILY="cos-stable"
 while true; do
   case "$1" in
   --project)
@@ -52,6 +54,10 @@ while true; do
     ;;
   --vm-type)
     VM_TYPE="$2"
+    shift 2
+    ;;
+  --image-family)
+    IMAGE_FAMILY="$2"
     shift 2
     ;;
   -h | --help)
@@ -73,43 +79,33 @@ fi
 
 ZONES=("${@}")
 
-count=0
-for zone in "${ZONES[@]}"; do
-  region="$(gcloud compute zones describe "${zone}" \
-    --project="${GOOGLE_CLOUD_PROJECT}" --format='value(region)' | xargs basename)"
-  count=$((count + 1))
-  if gcloud compute networks subnets describe "direct-path" \
-    --project="${GOOGLE_CLOUD_PROJECT}" \
-    --region="${region}" --format='value(ipCidrRange)' >/dev/null 2>&1; then
-    echo "direct-path already exists in ${region}"
-  else
-    gcloud compute networks subnets create "direct-path" \
-      --project="${GOOGLE_CLOUD_PROJECT}" \
-      --network=default \
-      --private-ipv6-google-access-type=enable-outbound-vm-access \
-      --region="${region}" \
-      --range="10.32.${count}.0/24"
-    gcloud compute networks subnets list \
-      --project="${GOOGLE_CLOUD_PROJECT}" \
-      --filter="region:${region}"
-  fi
-done
-
-SOURCE_IMAGE=$(gcloud compute images list --filter='family:cos-stable' --format='value(name)')
+SOURCE_IMAGE=$(gcloud compute images list --filter="family:${IMAGE_FAMILY}" --format='value(name)')
 readonly SOURCE_IMAGE
-IMAGE="${SOURCE_IMAGE}-gvnic"
-readonly IMAGE
+SOURCE_IMAGE_PROJECT=$(gcloud compute images list --filter="family:${IMAGE_FAMILY}" --format='value(selfLink)' |
+  sed -e 's;^.*projects/;;' -e 's;/.*;;')
+readonly SOURCE_IMAGE_PROJECT
+SOURCE_IMAGE_FEATURES=$(gcloud compute images list --filter="family:${IMAGE_FAMILY}" --format='value(guestOsFeatures)')
+readonly SOURCE_IMAGE_FEATURES
 
-if gcloud compute images describe "${IMAGE}" \
+IMAGE="${SOURCE_IMAGE}-gvnic"
+IMAGE_PROJECT="${GOOGLE_CLOUD_PROJECT}"
+if [[ "${SOURCE_IMAGE_FEATURES}" =~ "GVNIC" ]]; then
+  # The source image already has GVNIC enabled, no need to create a new image.
+  IMAGE="${SOURCE_IMAGE}"
+  IMAGE_PROJECT="${SOURCE_IMAGE_PROJECT}"
+elif gcloud compute images describe "${IMAGE}" \
     --project="${GOOGLE_CLOUD_PROJECT}" >/dev/null 2>&1; then
   echo "vm image (${IMAGE}) already exists"
 else
   gcloud compute images create "${IMAGE}" \
     --project="${GOOGLE_CLOUD_PROJECT}" \
     --source-image="${SOURCE_IMAGE}" \
-    --source-image-project="cos-cloud" \
+    --source-image-project="${SOURCE_IMAGE_PROJECT}" \
     --guest-os-features=GVNIC
 fi
+
+readonly IMAGE
+readonly IMAGE_PROJECT
 
 PROJECT_NUMBER="$(gcloud projects describe "${GOOGLE_CLOUD_PROJECT}" --format='value(projectNumber)')"
 readonly PROJECT_NUMBER
@@ -137,8 +133,8 @@ COMMON_INSTANCE_FLAGS=(
   # Use the image created (or found) above, note that this image
   # must support GVNIC, and must have the "GVNIC guest OS feature"
   # enabled.
-  --image-project="${GOOGLE_CLOUD_PROJECT}"
   --image="${IMAGE}"
+  --image-project="${IMAGE_PROJECT}"
 
   # Use the prescribed VM machine type
   --machine-type="${VM_TYPE}"
@@ -228,7 +224,7 @@ for zone in "${ZONES[@]}"; do
   echo "compute.${id} ssh-rsa ${key}" >>"${HOME}/.ssh/google_compute_known_hosts"
   echo "Enabling GCR on ${VM_NAME}"
   gcloud compute ssh --project="${GOOGLE_CLOUD_PROJECT}" --zone="${zone}" "${VM_NAME}" \
-    -- -o 'ProxyCommand=corp-ssh-helper %h %p' docker-credential-gcr configure-docker </dev/null
+    -- -o 'ProxyCommand=corp-ssh-helper %h %p' docker-credential-gcr configure-docker </dev/null || true
 done
 
 gcloud compute config-ssh --verbosity=none --project="${GOOGLE_CLOUD_PROJECT}"
