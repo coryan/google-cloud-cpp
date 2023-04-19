@@ -19,6 +19,7 @@
 storage_benchmark_programs = [
     "aggregate_download_throughput_benchmark.cc",
     "aggregate_upload_throughput_benchmark.cc",
+    "constant_throughput_benchmark.cc",
     "create_dataset.cc",
     "storage_file_transfer_benchmark.cc",
     "storage_parallel_uploads_benchmark.cc",

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "google/cloud/opentelemetry/configure_basic_tracing.h"
 #include "google/cloud/storage/benchmarks/benchmark_utils.h"
 #include "google/cloud/storage/benchmarks/throughput_experiment.h"
 #include "google/cloud/storage/benchmarks/throughput_options.h"
@@ -22,15 +23,18 @@
 #include "google/cloud/internal/build_info.h"
 #include "google/cloud/internal/format_time_point.h"
 #include "google/cloud/internal/getenv.h"
+#include "google/cloud/internal/opentelemetry_options.h"
 #include "google/cloud/internal/random.h"
 #include "google/cloud/log.h"
 #include "absl/time/time.h"
+#include <opentelemetry/trace/provider.h>
 #include <functional>
 #include <future>
 #include <set>
 #include <sstream>
 
 namespace {
+namespace g = ::google::cloud;
 namespace gcs = ::google::cloud::storage;
 namespace gcs_ex = ::google::cloud::storage_experimental;
 namespace gcs_bm = ::google::cloud::storage_benchmarks;
@@ -115,24 +119,27 @@ void RunThread(ThroughputOptions const& ThroughputOptions,
                ResultHandler const& handler,
                gcs_bm::ClientProvider const& provider);
 
-google::cloud::StatusOr<ThroughputOptions> ParseArgs(int argc, char* argv[]);
+g::StatusOr<ThroughputOptions> ParseArgs(int argc, char* argv[]);
 
 }  // namespace
 
 int main(int argc, char* argv[]) {
-  google::cloud::StatusOr<ThroughputOptions> options = ParseArgs(argc, argv);
+  auto options = ParseArgs(argc, argv);
   if (!options) {
     std::cerr << options.status() << "\n";
     return 1;
   }
   if (options->exit_after_parse) return 0;
 
-  auto client_options =
-      google::cloud::Options{options->client_options}.set<gcs::ProjectIdOption>(
-          options->project_id);
-  client_options = google::cloud::internal::MergeOptions(
-      options->rest_options, std::move(client_options));
+  auto client_options = g::Options{options->client_options}
+                            .set<gcs::ProjectIdOption>(options->project_id)
+                            .set<g::internal::OpenTelemetryTracingOption>(true);
+  client_options = g::internal::MergeOptions(options->rest_options,
+                                             std::move(client_options));
   auto client = gcs::Client(client_options);
+
+  auto tracing =
+      g::otel::ConfigureBasicTracing(g::Project(options->project_id));
 
   auto generator = google::cloud::internal::DefaultPRNG(std::random_device{}());
   auto bucket_name =
@@ -289,7 +296,8 @@ gcs_bm::ClientProvider PerTransport(gcs_bm::ClientProvider const& provider) {
 gcs_bm::ClientProvider BaseProvider(ThroughputOptions const& options) {
   return [=](ExperimentTransport t) {
     auto opts = google::cloud::Options{options.client_options}
-                    .set<gcs::ProjectIdOption>(options.project_id);
+                    .set<gcs::ProjectIdOption>(options.project_id)
+                    .set<g::internal::OpenTelemetryTracingOption>(true);
 #if GOOGLE_CLOUD_CPP_STORAGE_HAVE_GRPC
     using ::google::cloud::storage_experimental::DefaultGrpcClient;
     if (t == ExperimentTransport::kDirectPath) {
@@ -415,6 +423,14 @@ void RunThread(ThroughputOptions const& options, std::string const& bucket_name,
     bool const enable_md5 = options.enabled_md5[md5_generator(generator)];
     auto const range = read_range_generator(generator, object_size);
 
+    auto tracer =
+        opentelemetry::trace::Provider::GetTracerProvider()->GetTracer(
+            "cloud-cpp/benchmark", google::cloud::version_string());
+    opentelemetry::trace::StartSpanOptions span_options;
+    span_options.kind = opentelemetry::trace::SpanKind::kClient;
+    auto span = tracer->StartSpan("Iteration", span_options);
+    auto scope = tracer->WithActiveSpan(span);
+
     auto& uploader = uploaders[uploader_generator(generator)];
     auto upload_result = uploader->Run(
         bucket_name, object_name,
@@ -435,6 +451,7 @@ void RunThread(ThroughputOptions const& options, std::string const& bucket_name,
     }
     auto client = provider(ExperimentTransport::kJson);
     (void)client.DeleteObject(bucket_name, object_name);
+    span->End();
     // If needed, pace the benchmark so each thread generates only so many
     // samples each second.
     auto const pace = start + options.minimum_sample_delay;

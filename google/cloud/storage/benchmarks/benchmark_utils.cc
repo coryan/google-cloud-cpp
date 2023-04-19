@@ -18,6 +18,7 @@
 #include "google/cloud/grpc_options.h"
 #include "google/cloud/internal/absl_str_cat_quiet.h"
 #include "google/cloud/internal/absl_str_join_quiet.h"
+#include "google/cloud/internal/build_info.h"
 #include "google/cloud/internal/compute_engine_util.h"
 #include "google/cloud/internal/curl_options.h"
 #include "google/cloud/internal/rest_client.h"
@@ -26,6 +27,7 @@
 #include "absl/strings/str_split.h"
 #include "absl/strings/strip.h"
 #include "absl/time/time.h"
+#include <algorithm>
 #include <future>
 #include <sstream>
 
@@ -212,11 +214,14 @@ void PrintOptions(std::ostream& os, std::string const& prefix,
   }
 }
 
-// Format a timestamp
 std::string FormatTimestamp(std::chrono::system_clock::time_point tp) {
   auto constexpr kFormat = "%E4Y-%m-%dT%H:%M:%E*SZ";
   auto const t = absl::FromChrono(tp);
   return absl::FormatTime(kFormat, t, absl::UTCTimeZone());
+}
+
+std::string FormatDuration(std::chrono::microseconds d) {
+  return absl::FormatDuration(absl::FromChrono(d));
 }
 
 absl::optional<std::string> GetLabel(std::vector<std::string> const& labels,
@@ -295,6 +300,15 @@ std::string AddDefaultLabels(std::string const& labels) {
     }
   }
   return absl::StrJoin(components, ",");
+}
+
+std::string BuildInfo() {
+  auto s = google::cloud::storage::version_string() + ";" +
+           google::cloud::internal::compiler() + ";" +
+           google::cloud::internal::compiler_flags();
+  std::transform(s.begin(), s.end(), s.begin(),
+                 [](char c) { return c == '\n' ? ';' : c; });
+  return s;
 }
 
 }  // namespace storage_benchmarks

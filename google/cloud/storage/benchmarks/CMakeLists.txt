@@ -49,6 +49,7 @@ set(storage_benchmark_programs
     # cmake-format: sort
     aggregate_download_throughput_benchmark.cc
     aggregate_upload_throughput_benchmark.cc
+    constant_throughput_benchmark.cc
     create_dataset.cc
     storage_file_transfer_benchmark.cc
     storage_parallel_uploads_benchmark.cc
@@ -62,6 +63,8 @@ foreach (fname ${storage_benchmark_programs})
         PRIVATE storage_benchmarks
                 storage_client_testing
                 google_cloud_cpp_testing
+                google-cloud-cpp::trace
+                google-cloud-cpp::experimental-opentelemetry
                 google-cloud-cpp::storage
                 google-cloud-cpp::common
                 absl::strings

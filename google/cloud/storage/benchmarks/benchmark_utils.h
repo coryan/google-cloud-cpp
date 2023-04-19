@@ -124,6 +124,9 @@ void PrintOptions(std::ostream& os, std::string const& prefix,
 // Format a timestamp
 std::string FormatTimestamp(std::chrono::system_clock::time_point tp);
 
+// Format a duration
+std::string FormatDuration(std::chrono::microseconds d);
+
 // The current time, formatted
 inline std::string CurrentTime() {
   return FormatTimestamp(std::chrono::system_clock::now());
@@ -135,6 +138,8 @@ absl::optional<std::string> Zone(std::string const& labels);
 absl::optional<std::string> Job(std::string const& labels);
 absl::optional<std::string> Task(std::string const& labels);
 std::string AddDefaultLabels(std::string const& labels);
+
+std::string BuildInfo();
 
 }  // namespace storage_benchmarks
 }  // namespace cloud
