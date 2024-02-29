@@ -30,11 +30,15 @@
 
 namespace {
 
+namespace gc = google::cloud;
 using ::google::storage::control::v2::Folder;
 
-void RenameMultipleTimes(
-    google::cloud::storagecontrol_v2::StorageControlClient client,
-    std::string const& bucket_name, std::string const& prefix) {
+void RenameMultipleTimes(std::string const& bucket_name,
+                         std::string const& prefix) {
+  auto client = gc::storagecontrol_v2::StorageControlClient(
+      gc::storagecontrol_v2::MakeStorageControlConnection(
+          gc::Options{}.set<gc::OpenTelemetryTracingOption>(true)));
+
   auto make_id = [prefix](int count) {
     std::ostringstream os;
     os << prefix << "-" << std::this_thread::get_id() << "-" << count;
@@ -64,19 +68,14 @@ int main(int argc, char* argv[]) try {
   auto bucket_name = std::string(argv[2]);
   auto prefix = std::string(argv[3]);
 
-  namespace gc = google::cloud;
   auto configuration = gc::otel::ConfigureBasicTracing(
       gc::Project(project_id),
       gc::Options{}.set<gc::otel::BasicTracingRateOption>(0.10));
 
-  auto client = gc::storagecontrol_v2::StorageControlClient(
-      gc::storagecontrol_v2::MakeStorageControlConnection(
-          gc::Options{}.set<gc::OpenTelemetryTracingOption>(true)));
-
   std::vector<std::future<void>> tasks;
   std::generate_n(std::back_inserter(tasks), 128, [&] {
-    return std::async(std::launch::async, RenameMultipleTimes, client,
-                      bucket_name, prefix);
+    return std::async(std::launch::async, RenameMultipleTimes, bucket_name,
+                      prefix);
   });
   for (auto& t : tasks) try {
       t.get();
