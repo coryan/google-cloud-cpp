@@ -56,7 +56,7 @@ void RenameMultipleTimes(std::string const& bucket_name,
     auto renamed = client.RenameFolder(folder_name, make_id(i)).get();
     if (!renamed) throw std::move(renamed).status();
     folder_name = renamed->name();
-    std::this_thread::sleep_for(500ms);
+    std::this_thread::sleep_for(2000ms);
   }
 }
 
