@@ -24,6 +24,7 @@
 #include <chrono>
 #include <future>
 #include <iostream>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -33,10 +34,12 @@ namespace {
 
 namespace gc = google::cloud;
 using ::google::storage::control::v2::Folder;
-using namespace std::chrono_literals;
 
 void RenameMultipleTimes(std::string const& bucket_name,
-                         std::string const& prefix) {
+                         std::string const& prefix, int iterations) {
+  std::mt19937_64 gen(std::random_device{}());
+  std::uniform_int_distribution<int> pause(0, 3000);
+
   auto client = gc::storagecontrol_v2::StorageControlClient(
       gc::storagecontrol_v2::MakeStorageControlConnection(
           gc::Options{}.set<gc::OpenTelemetryTracingOption>(true)));
@@ -46,30 +49,37 @@ void RenameMultipleTimes(std::string const& bucket_name,
     os << prefix << "-" << std::this_thread::get_id() << "-" << count;
     return std::move(os).str();
   };
+  // Avoid launching all the operations at the same time.
+  std::this_thread::sleep_for(std::chrono::milliseconds(pause(gen)));
+  // Create a different folder in each thread to operate independently.
   google::storage::control::v2::CreateFolderRequest create;
   create.set_parent("projects/_/buckets/" + bucket_name);
   create.set_folder_id(make_id(0));
   auto folder = client.CreateFolder(create);
   if (!folder) throw std::move(folder).status();
+  // Repeatedly rename this folder.
   auto folder_name = folder->name();
-  for (int i = 1; i != 100'000; ++i) {
+  for (int i = 1; i != iterations; ++i) {
+    // Avoid launching all the operations at the same time.
+    std::this_thread::sleep_for(std::chrono::milliseconds(pause(gen)));
     auto renamed = client.RenameFolder(folder_name, make_id(i)).get();
     if (!renamed) throw std::move(renamed).status();
     folder_name = renamed->name();
-    std::this_thread::sleep_for(2000ms);
   }
 }
 
 }  // namespace
 
 int main(int argc, char* argv[]) try {
-  if (argc != 4) {
-    throw std::runtime_error("Usage: cmd <project-id> <bucket-name> <prefix>");
+  if (argc != 5) {
+    throw std::runtime_error(
+        "Usage: cmd <project-id> <bucket-name> <prefix> <iterations>");
   }
 
   auto const project_id = std::string(argv[1]);
   auto bucket_name = std::string(argv[2]);
   auto prefix = std::string(argv[3]);
+  auto iterations = std::stoi(argv[4]);
 
   auto configuration =
       gc::otel::ConfigureBasicTracing(gc::Project(project_id), gc::Options{});
@@ -77,7 +87,7 @@ int main(int argc, char* argv[]) try {
   std::vector<std::future<void>> tasks;
   std::generate_n(std::back_inserter(tasks), 128, [&] {
     return std::async(std::launch::async, RenameMultipleTimes, bucket_name,
-                      prefix);
+                      prefix, iterations);
   });
   for (auto& t : tasks) try {
       t.get();
