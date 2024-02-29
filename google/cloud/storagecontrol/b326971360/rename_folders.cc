@@ -21,6 +21,7 @@
 #include "google/cloud/project.h"
 #include <google/storage/control/v2/storage_control.pb.h>
 #include <algorithm>
+#include <chrono>
 #include <future>
 #include <iostream>
 #include <stdexcept>
@@ -32,6 +33,7 @@ namespace {
 
 namespace gc = google::cloud;
 using ::google::storage::control::v2::Folder;
+using namespace std::chrono_literals;
 
 void RenameMultipleTimes(std::string const& bucket_name,
                          std::string const& prefix) {
@@ -50,10 +52,11 @@ void RenameMultipleTimes(std::string const& bucket_name,
   auto folder = client.CreateFolder(create);
   if (!folder) throw std::move(folder).status();
   auto folder_name = folder->name();
-  for (int i = 1; i != 1000; ++i) {
+  for (int i = 1; i != 100'000; ++i) {
     auto renamed = client.RenameFolder(folder_name, make_id(i)).get();
     if (!renamed) throw std::move(renamed).status();
     folder_name = renamed->name();
+    std::this_thread::sleep_for(500ms);
   }
 }
 
@@ -68,9 +71,8 @@ int main(int argc, char* argv[]) try {
   auto bucket_name = std::string(argv[2]);
   auto prefix = std::string(argv[3]);
 
-  auto configuration = gc::otel::ConfigureBasicTracing(
-      gc::Project(project_id),
-      gc::Options{}.set<gc::otel::BasicTracingRateOption>(0.10));
+  auto configuration =
+      gc::otel::ConfigureBasicTracing(gc::Project(project_id), gc::Options{});
 
   std::vector<std::future<void>> tasks;
   std::generate_n(std::back_inserter(tasks), 128, [&] {
