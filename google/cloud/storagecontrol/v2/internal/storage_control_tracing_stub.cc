@@ -37,6 +37,9 @@ StorageControlTracingStub::CreateFolder(
     google::storage::control::v2::CreateFolderRequest const& request) {
   auto span = internal::MakeSpanGrpc("google.storage.control.v2.StorageControl",
                                      "CreateFolder");
+  if (!request.request_id().empty()) {
+    span->SetAttribute("gl-cpp.request_id", request.request_id());
+  }
   auto scope = opentelemetry::trace::Scope(span);
   internal::InjectTraceContext(context, *propagator_);
   return internal::EndSpan(context, *span,
@@ -48,6 +51,9 @@ Status StorageControlTracingStub::DeleteFolder(
     google::storage::control::v2::DeleteFolderRequest const& request) {
   auto span = internal::MakeSpanGrpc("google.storage.control.v2.StorageControl",
                                      "DeleteFolder");
+  if (!request.request_id().empty()) {
+    span->SetAttribute("gl-cpp.request_id", request.request_id());
+  }
   auto scope = opentelemetry::trace::Scope(span);
   internal::InjectTraceContext(context, *propagator_);
   return internal::EndSpan(context, *span,
@@ -60,6 +66,9 @@ StorageControlTracingStub::GetFolder(
     google::storage::control::v2::GetFolderRequest const& request) {
   auto span = internal::MakeSpanGrpc("google.storage.control.v2.StorageControl",
                                      "GetFolder");
+  if (!request.request_id().empty()) {
+    span->SetAttribute("gl-cpp.request_id", request.request_id());
+  }
   auto scope = opentelemetry::trace::Scope(span);
   internal::InjectTraceContext(context, *propagator_);
   return internal::EndSpan(context, *span,
@@ -86,6 +95,9 @@ StorageControlTracingStub::AsyncRenameFolder(
     google::storage::control::v2::RenameFolderRequest const& request) {
   auto span = internal::MakeSpanGrpc("google.storage.control.v2.StorageControl",
                                      "RenameFolder");
+  if (!request.request_id().empty()) {
+    span->SetAttribute("gl-cpp.request_id", request.request_id());
+  }
   internal::OTelScope scope(span);
   internal::InjectTraceContext(*context, *propagator_);
   auto f = child_->AsyncRenameFolder(cq, context, std::move(options), request);
@@ -98,6 +110,9 @@ StorageControlTracingStub::GetStorageLayout(
     google::storage::control::v2::GetStorageLayoutRequest const& request) {
   auto span = internal::MakeSpanGrpc("google.storage.control.v2.StorageControl",
                                      "GetStorageLayout");
+  if (!request.request_id().empty()) {
+    span->SetAttribute("gl-cpp.request_id", request.request_id());
+  }
   auto scope = opentelemetry::trace::Scope(span);
   internal::InjectTraceContext(context, *propagator_);
   return internal::EndSpan(context, *span,
