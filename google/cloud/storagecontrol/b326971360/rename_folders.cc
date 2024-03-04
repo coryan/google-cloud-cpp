@@ -36,7 +36,7 @@ namespace gc = google::cloud;
 using ::google::storage::control::v2::Folder;
 
 void RenameMultipleTimes(std::string const& bucket_name,
-                         std::string const& prefix, int iterations) {
+                         std::string const& prefix, int iterations) try {
   std::mt19937_64 gen(std::random_device{}());
   std::uniform_int_distribution<int> pause(0, 3000);
 
@@ -66,6 +66,9 @@ void RenameMultipleTimes(std::string const& bucket_name,
     if (!renamed) throw std::move(renamed).status();
     folder_name = renamed->name();
   }
+} catch(gc::Status const& status) {
+  std::cerr << status << "\n";
+  throw;
 }
 
 }  // namespace
