@@ -6,6 +6,12 @@ breaking changes in the upcoming 3.x release. This release is scheduled for
 
 ## v2.24.0 - TBD
 
+### New Libraries
+
+- [Google Cloud Storage](/google/cloud/storage/README.md) - the gRPC plugin is
+  now GA. The [Using the gRPC plugin][storage-grpc] guide describe this feature
+  in more detail.
+
 ### Updated Libraries
 
 - [Cloud SQL Admin API](/google/cloud/sql/README.md) - several new clients:
@@ -1500,3 +1506,4 @@ case it elicits some feedback that requires changes.
 [product-launch-stages]: https://cloud.google.com/products/#product-launch-stages
 [resource-manager-tags]: https://cloud.google.com/resource-manager/docs/tags/tags-overview
 [speech-model-adaptation]: https://cloud.google.com/speech-to-text/docs/adaptation-model
+[storage-grpc]: https://cloud.google.com/cpp/docs/reference/storage/latest/storage-grpc

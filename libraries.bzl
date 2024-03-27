@@ -21,6 +21,7 @@ GOOGLE_CLOUD_CPP_EXPERIMENTAL_LIBRARIES = [
 ]
 
 GOOGLE_CLOUD_CPP_TRANSITION_LIBRARIES = [
+    "storage_grpc",
     "storagecontrol",
 ]
 
