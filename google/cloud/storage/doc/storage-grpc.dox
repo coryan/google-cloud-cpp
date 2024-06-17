@@ -19,16 +19,21 @@ VMs.
 There are some features that the gRPC plugin does not implement or implements
 differently from the REST-based implementation.
 
-1. For best performance consider using Protobuf >= 23.2 and gRPC >= 1.55.0.
-   Older versions of Protobuf requires enabling [ctype=CORD workarounds] at
-   compile-time.
+[Traffic Director]: https://cloud.google.com/blog/topics/developers-practitioners/traffic-director-explained
+
+1. We recommend you use Protobuf >= 23.2 and gRPC >= 1.65.0 with GCS+gRPC.
+1. For best performance on GCE or GKE, consider using [Traffic Director].
+   Change the endpoint to `google-c2p:///storage.googleapis.com`. 
+1. You should enable OpenTelemetry support when using GCS+gRPC and Traffic
+   Director. When using Traffic Director, GCS+gRPC uses client-side load
+   balancing. The gRPC client library receives load information from the
+   service, and routes based on this information. Google support needs
+   client-side telemetry to diagnose any problems with the load balancing data.
 1. To override the default endpoint you should use
    [`EndpointOption`](@ref google::cloud::EndpointOption) instead of
    [`RestEndpointOption`](@ ref google::cloud::storage::RestEndpointOption).
 1. The default endpoint (`storage.googleapis.com`) works from any hosting
-   environment (on-prem, GKE, GCE, other cloud providers, etc.). For best
-   performance on GCE or GKE consider using
-   `google-c2p:///storage.googleapis.com`.
+   environment (on-prem, GKE, GCE, other cloud providers, etc.).
 1. The [`Fields`](@ref google::cloud::storage::Fields) request parameter is
    passed verbatim to the backend. Some fields have different names in gRPC, and
    the backend does not translate them. This is a rarely used feature, and we do
@@ -68,6 +73,20 @@ used as before:
 @snippet storage_grpc_samples.cc grpc-read-write
 
 ## Changing your build scripts
+
+Your build scripts may need some minor changes to enable GCS+gRPC support.
+
+### Bazel
+
+The client :
+
+```shell
+bazel build --@io_opentelemetry_cpp//api:with_abseil  ...
+```
+
+You can add these flags to your project's `.bazelrc` file.
+
+### CMake
 
 If you are using CMake to compile your application, then you need to change the
 `target_link_libraries()` command to use
