@@ -15,6 +15,7 @@
 #ifndef GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_OPENTELEMETRY_INTERNAL_RECORDABLE_H
 #define GOOGLE_CLOUD_CPP_GOOGLE_CLOUD_OPENTELEMETRY_INTERNAL_RECORDABLE_H
 
+#include "google/cloud/internal/random.h"
 #include "google/cloud/project.h"
 #include "google/cloud/version.h"
 #include <google/devtools/cloudtrace/v2/trace.pb.h>
@@ -22,6 +23,7 @@
 #include <opentelemetry/common/attribute_value.h>
 #include <opentelemetry/sdk/trace/recordable.h>
 #include <opentelemetry/version.h>
+#include <cstdint>
 
 namespace google {
 namespace cloud {
@@ -98,7 +100,9 @@ void AddAttribute(
  */
 class Recordable final : public opentelemetry::sdk::trace::Recordable {
  public:
-  explicit Recordable(Project project) : project_(std::move(project)) {}
+  explicit Recordable(Project project)
+      : project_(std::move(project)),
+        generator_(google::cloud::internal::MakeDefaultPRNG()) {}
 
   bool valid() const { return valid_; }
 
@@ -165,6 +169,8 @@ class Recordable final : public opentelemetry::sdk::trace::Recordable {
 
   std::string scope_name_;
   std::string scope_version_;
+  google::cloud::internal::DefaultPRNG generator_;
+  std::int64_t timed_event_count_ = 0;
 };
 
 GOOGLE_CLOUD_CPP_INLINE_NAMESPACE_END
