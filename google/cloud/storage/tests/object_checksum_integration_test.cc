@@ -49,11 +49,10 @@ class ObjectChecksumIntegrationTest
 
 /// @test Verify that CRC32C checksums are enabled by default.
 TEST_P(ObjectChecksumIntegrationTest, InsertObjectDefault) {
-  StatusOr<Client> client = MakeIntegrationTestClient();
-  ASSERT_STATUS_OK(client);
+  auto client = MakeIntegrationTestClient();
   auto object_name = MakeRandomObjectName();
-  auto meta = client->InsertObject(bucket_name_, object_name, LoremIpsum(),
-                                   DisableMD5Hash(true), IfGenerationMatch(0));
+  auto meta = client.InsertObject(bucket_name_, object_name, LoremIpsum(),
+                                  DisableMD5Hash(true), IfGenerationMatch(0));
   ASSERT_STATUS_OK(meta);
   ScheduleForDelete(*meta);
 
@@ -65,12 +64,11 @@ TEST_P(ObjectChecksumIntegrationTest, InsertObjectDefault) {
 
 /// @test Verify that `DisableCrc32cChecksum(true)` works as expected.
 TEST_P(ObjectChecksumIntegrationTest, InsertObjectExplicitDisable) {
-  StatusOr<Client> client = MakeIntegrationTestClient();
-  ASSERT_STATUS_OK(client);
+  auto client = MakeIntegrationTestClient();
   auto object_name = MakeRandomObjectName();
-  auto meta = client->InsertObject(bucket_name_, object_name, LoremIpsum(),
-                                   DisableCrc32cChecksum(true),
-                                   DisableMD5Hash(true), IfGenerationMatch(0));
+  auto meta = client.InsertObject(bucket_name_, object_name, LoremIpsum(),
+                                  DisableCrc32cChecksum(true),
+                                  DisableMD5Hash(true), IfGenerationMatch(0));
   ASSERT_STATUS_OK(meta);
   ScheduleForDelete(*meta);
 
@@ -82,12 +80,11 @@ TEST_P(ObjectChecksumIntegrationTest, InsertObjectExplicitDisable) {
 
 /// @test Verify that `DisableCrc32cChecksum(false)` works as expected.
 TEST_P(ObjectChecksumIntegrationTest, InsertObjectExplicitEnable) {
-  StatusOr<Client> client = MakeIntegrationTestClient();
-  ASSERT_STATUS_OK(client);
+  auto client = MakeIntegrationTestClient();
   auto object_name = MakeRandomObjectName();
-  auto meta = client->InsertObject(bucket_name_, object_name, LoremIpsum(),
-                                   DisableCrc32cChecksum(false),
-                                   DisableMD5Hash(true), IfGenerationMatch(0));
+  auto meta = client.InsertObject(bucket_name_, object_name, LoremIpsum(),
+                                  DisableCrc32cChecksum(false),
+                                  DisableMD5Hash(true), IfGenerationMatch(0));
   ASSERT_STATUS_OK(meta);
   ScheduleForDelete(*meta);
 
@@ -98,10 +95,9 @@ TEST_P(ObjectChecksumIntegrationTest, InsertObjectExplicitEnable) {
 }
 
 TEST_P(ObjectChecksumIntegrationTest, InsertObjectWithValueSuccess) {
-  StatusOr<Client> client = MakeIntegrationTestClient();
-  ASSERT_STATUS_OK(client);
+  auto client = MakeIntegrationTestClient();
   auto object_name = MakeRandomObjectName();
-  auto meta = client->InsertObject(
+  auto meta = client.InsertObject(
       bucket_name_, object_name, LoremIpsum(),
       Crc32cChecksumValue(ComputeCrc32cChecksum(LoremIpsum())),
       DisableMD5Hash(true), IfGenerationMatch(0));
@@ -118,10 +114,9 @@ TEST_P(ObjectChecksumIntegrationTest, InsertObjectWithValueFailure) {
   // TODO(#14385) - the emulator does not support this feature for gRPC.
   if (UsingEmulator() && UsingGrpc()) GTEST_SKIP();
 
-  StatusOr<Client> client = MakeIntegrationTestClient();
-  ASSERT_STATUS_OK(client);
+  auto client = MakeIntegrationTestClient();
   auto object_name = MakeRandomObjectName();
-  auto failure = client->InsertObject(
+  auto failure = client.InsertObject(
       bucket_name_, object_name, LoremIpsum(), DisableMD5Hash(true),
       IfGenerationMatch(0), Crc32cChecksumValue(ComputeCrc32cChecksum("")));
   EXPECT_THAT(failure, Not(IsOk()));
@@ -129,11 +124,10 @@ TEST_P(ObjectChecksumIntegrationTest, InsertObjectWithValueFailure) {
 
 /// @test Verify that CRC32C checksums are computed by default in WriteObject().
 TEST_F(ObjectChecksumIntegrationTest, WriteObjectDefault) {
-  StatusOr<Client> client = MakeIntegrationTestClient();
-  ASSERT_STATUS_OK(client);
+  auto client = MakeIntegrationTestClient();
   auto object_name = MakeRandomObjectName();
-  auto os = client->WriteObject(bucket_name_, object_name, DisableMD5Hash(true),
-                                IfGenerationMatch(0));
+  auto os = client.WriteObject(bucket_name_, object_name, DisableMD5Hash(true),
+                               IfGenerationMatch(0));
   os << LoremIpsum();
   os.Close();
   auto meta = os.metadata();
@@ -160,12 +154,11 @@ TEST_F(ObjectChecksumIntegrationTest, WriteObjectDefault) {
 /// @test Verify that CRC32C checksums can be explicitly disabled in
 /// WriteObject().
 TEST_F(ObjectChecksumIntegrationTest, WriteObjectExplicitDisable) {
-  StatusOr<Client> client = MakeIntegrationTestClient();
-  ASSERT_STATUS_OK(client);
+  auto client = MakeIntegrationTestClient();
   auto object_name = MakeRandomObjectName();
-  auto os = client->WriteObject(bucket_name_, object_name,
-                                DisableCrc32cChecksum(true),
-                                DisableMD5Hash(true), IfGenerationMatch(0));
+  auto os =
+      client.WriteObject(bucket_name_, object_name, DisableCrc32cChecksum(true),
+                         DisableMD5Hash(true), IfGenerationMatch(0));
   os << LoremIpsum();
   os.Close();
   auto meta = os.metadata();
@@ -185,12 +178,11 @@ TEST_F(ObjectChecksumIntegrationTest, WriteObjectExplicitDisable) {
 /// @test Verify that CRC32C checksums can be explicitly enabled in
 /// WriteObject().
 TEST_F(ObjectChecksumIntegrationTest, WriteObjectExplicitEnable) {
-  StatusOr<Client> client = MakeIntegrationTestClient();
-  ASSERT_STATUS_OK(client);
+  auto client = MakeIntegrationTestClient();
   auto object_name = MakeRandomObjectName();
-  auto os = client->WriteObject(bucket_name_, object_name,
-                                DisableCrc32cChecksum(false),
-                                DisableMD5Hash(true), IfGenerationMatch(0));
+  auto os = client.WriteObject(bucket_name_, object_name,
+                               DisableCrc32cChecksum(false),
+                               DisableMD5Hash(true), IfGenerationMatch(0));
   os << LoremIpsum();
   os.Close();
   auto meta = os.metadata();
@@ -215,10 +207,9 @@ TEST_F(ObjectChecksumIntegrationTest, WriteObjectExplicitEnable) {
 
 /// @test Verify that valid CRC32C checksums values work in WriteObject().
 TEST_F(ObjectChecksumIntegrationTest, WriteObjectWithValueSuccess) {
-  StatusOr<Client> client = MakeIntegrationTestClient();
-  ASSERT_STATUS_OK(client);
+  auto client = MakeIntegrationTestClient();
   auto object_name = MakeRandomObjectName();
-  auto os = client->WriteObject(
+  auto os = client.WriteObject(
       bucket_name_, object_name,
       Crc32cChecksumValue(ComputeCrc32cChecksum(LoremIpsum())),
       DisableMD5Hash(true), IfGenerationMatch(0));
@@ -239,10 +230,9 @@ TEST_F(ObjectChecksumIntegrationTest, WriteObjectWithValueFailure) {
   // TODO(#14385) - the emulator does not support this feature for gRPC.
   if (UsingEmulator() && UsingGrpc()) GTEST_SKIP();
 
-  StatusOr<Client> client = MakeIntegrationTestClient();
-  ASSERT_STATUS_OK(client);
+  auto client = MakeIntegrationTestClient();
   auto object_name = MakeRandomObjectName();
-  auto os = client->WriteObject(
+  auto os = client.WriteObject(
       bucket_name_, object_name, MD5HashValue(ComputeMD5Hash("")),
       DisableCrc32cChecksum(true), IfGenerationMatch(0));
   os << LoremIpsum();
@@ -258,13 +248,12 @@ TEST_F(ObjectChecksumIntegrationTest, WriteObjectReceiveBadChecksum) {
   // emulator to inject faults. The emulator does not support this type of fault
   // injection for gRPC either.
   if (!UsingEmulator() || UsingGrpc()) GTEST_SKIP();
-  StatusOr<Client> client = MakeIntegrationTestClient();
-  ASSERT_STATUS_OK(client);
+  auto client = MakeIntegrationTestClient();
 
   auto object_name = MakeRandomObjectName();
 
   // Create a stream to upload an object.
-  ObjectWriteStream stream = client->WriteObject(
+  ObjectWriteStream stream = client.WriteObject(
       bucket_name_, object_name, DisableMD5Hash(true),
       CustomHeader("x-goog-emulator-instructions", "inject-upload-data-error"),
       IfGenerationMatch(0));
@@ -280,13 +269,12 @@ TEST_F(ObjectChecksumIntegrationTest, WriteObjectReceiveBadChecksum) {
 TEST_F(ObjectChecksumIntegrationTest, WriteObjectUploadBadChecksum) {
   // TODO(#14385) - the emulator does not support this feature for gRPC.
   if (UsingEmulator() && UsingGrpc()) GTEST_SKIP();
-  StatusOr<Client> client = MakeIntegrationTestClient();
-  ASSERT_STATUS_OK(client);
+  auto client = MakeIntegrationTestClient();
 
   auto object_name = MakeRandomObjectName();
 
   // Create a stream to upload an object.
-  ObjectWriteStream stream = client->WriteObject(
+  ObjectWriteStream stream = client.WriteObject(
       bucket_name_, object_name, Crc32cChecksumValue(ComputeCrc32cChecksum("")),
       DisableMD5Hash(true), IfGenerationMatch(0));
   stream << LoremIpsum() << "\n";
@@ -300,15 +288,14 @@ TEST_P(ObjectChecksumIntegrationTest, ReadObjectDefault) {
   // TODO(#14385) - the emulator does not support this feature for gRPC.
   if (UsingEmulator() && UsingGrpc()) GTEST_SKIP();
 
-  StatusOr<Client> client = MakeIntegrationTestClient();
-  ASSERT_STATUS_OK(client);
+  auto client = MakeIntegrationTestClient();
   auto object_name = MakeRandomObjectName();
-  auto meta = client->InsertObject(bucket_name_, object_name, LoremIpsum(),
-                                   IfGenerationMatch(0));
+  auto meta = client.InsertObject(bucket_name_, object_name, LoremIpsum(),
+                                  IfGenerationMatch(0));
   ASSERT_STATUS_OK(meta);
   ScheduleForDelete(*meta);
 
-  auto stream = client->ReadObject(bucket_name_, object_name);
+  auto stream = client.ReadObject(bucket_name_, object_name);
   auto const actual = std::string{std::istreambuf_iterator<char>{stream}, {}};
   ASSERT_FALSE(stream.IsOpen());
 
@@ -323,15 +310,14 @@ TEST_P(ObjectChecksumIntegrationTest, ReadObjectCorruptedByServerGetc) {
   // emulator to inject faults. The emulator does not support this type of fault
   // injection for gRPC either.
   if (!UsingEmulator() || UsingGrpc()) GTEST_SKIP();
-  StatusOr<Client> client = MakeIntegrationTestClient();
-  ASSERT_STATUS_OK(client);
+  auto client = MakeIntegrationTestClient();
   auto object_name = MakeRandomObjectName();
-  StatusOr<ObjectMetadata> meta = client->InsertObject(
+  StatusOr<ObjectMetadata> meta = client.InsertObject(
       bucket_name_, object_name, LoremIpsum(), IfGenerationMatch(0));
   ASSERT_STATUS_OK(meta);
   ScheduleForDelete(*meta);
 
-  auto stream = client->ReadObject(
+  auto stream = client.ReadObject(
       bucket_name_, object_name, DisableMD5Hash(true),
       CustomHeader("x-goog-emulator-instructions", "return-corrupted-data"));
 
@@ -362,16 +348,15 @@ TEST_P(ObjectChecksumIntegrationTest, ReadObjectCorruptedByServerRead) {
   // emulator to inject faults. The emulator does not support this type of fault
   // injection for gRPC either.
   if (!UsingEmulator() || UsingGrpc()) GTEST_SKIP();
-  StatusOr<Client> client = MakeIntegrationTestClient();
-  ASSERT_STATUS_OK(client);
+  auto client = MakeIntegrationTestClient();
   auto object_name = MakeRandomObjectName();
   StatusOr<ObjectMetadata> meta =
-      client->InsertObject(bucket_name_, object_name, LoremIpsum(),
-                           IfGenerationMatch(0), Projection::Full());
+      client.InsertObject(bucket_name_, object_name, LoremIpsum(),
+                          IfGenerationMatch(0), Projection::Full());
   ASSERT_STATUS_OK(meta);
   ScheduleForDelete(*meta);
 
-  auto stream = client->ReadObject(
+  auto stream = client.ReadObject(
       bucket_name_, object_name, DisableMD5Hash(true),
       CustomHeader("x-goog-emulator-instructions", "return-corrupted-data"));
 

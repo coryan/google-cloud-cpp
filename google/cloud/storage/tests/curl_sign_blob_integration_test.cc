@@ -43,8 +43,7 @@ class CurlSignBlobIntegrationTest
 TEST_F(CurlSignBlobIntegrationTest, Simple) {
   // TODO(#14385) - the emulator does not support this feature for gRPC.
   if (UsingEmulator() && UsingGrpc()) GTEST_SKIP();
-  StatusOr<Client> client = MakeIntegrationTestClient();
-  ASSERT_STATUS_OK(client);
+  auto client = MakeIntegrationTestClient();
 
   auto encoded = Base64Encode(LoremIpsum());
 
@@ -52,7 +51,7 @@ TEST_F(CurlSignBlobIntegrationTest, Simple) {
 
   // This is normally done by `storage::Client`, but we are bypassing it as part
   // of this test.
-  auto connection = internal::ClientImplDetails::GetConnection(*client);
+  auto connection = internal::ClientImplDetails::GetConnection(client);
   google::cloud::internal::OptionsSpan const span(connection->options());
   StatusOr<SignBlobResponse> response = connection->SignBlob(request);
   ASSERT_STATUS_OK(response);

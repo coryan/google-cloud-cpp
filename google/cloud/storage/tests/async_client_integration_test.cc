@@ -71,7 +71,6 @@ auto AlwaysRetry() {
 
 TEST_F(AsyncClientIntegrationTest, ObjectCRUD) {
   auto client = MakeIntegrationTestClient();
-  ASSERT_STATUS_OK(client);
 
   auto object_name = MakeRandomObjectName();
 
@@ -105,13 +104,12 @@ TEST_F(AsyncClientIntegrationTest, ObjectCRUD) {
                     .get();
   EXPECT_STATUS_OK(status);
 
-  auto get = client->GetObjectMetadata(bucket_name(), object_name);
+  auto get = client.GetObjectMetadata(bucket_name(), object_name);
   EXPECT_THAT(get, StatusIs(StatusCode::kNotFound));
 }
 
 TEST_F(AsyncClientIntegrationTest, ComposeObject) {
   auto client = MakeIntegrationTestClient();
-  ASSERT_STATUS_OK(client);
 
   auto o1 = MakeRandomObjectName();
   auto o2 = MakeRandomObjectName();
