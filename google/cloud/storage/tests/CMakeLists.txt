@@ -59,6 +59,7 @@ set(storage_client_integration_tests
     object_write_preconditions_integration_test.cc
     object_write_stream_integration_test.cc
     object_write_streambuf_integration_test.cc
+    repro_b353688666_test.cc
     service_account_credentials_integration_test.cc
     service_account_integration_test.cc
     signed_url_conformance_test.cc
