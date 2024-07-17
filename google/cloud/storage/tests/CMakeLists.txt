@@ -101,6 +101,7 @@ foreach (fname IN LISTS storage_client_integration_tests)
         ${target}
         PRIVATE storage_client_testing
                 google_cloud_cpp_testing
+                google-cloud-cpp::opentelemetry
                 google-cloud-cpp::storage
                 google-cloud-cpp::common
                 GTest::gmock_main

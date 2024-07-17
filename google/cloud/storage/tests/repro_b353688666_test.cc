@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "google/cloud/opentelemetry/configure_basic_tracing.h"
 #include "google/cloud/storage/grpc_plugin.h"
 #include "google/cloud/storage/testing/storage_integration_test.h"
+#include "google/cloud/internal/absl_str_cat_quiet.h"
 #include "google/cloud/internal/getenv.h"
 #include "google/cloud/internal/random.h"
-#include "google/cloud/internal/absl_str_cat_quiet.h"
+#include "google/cloud/opentelemetry_options.h"
 #include "google/cloud/testing_util/scoped_environment.h"
 #include "google/cloud/testing_util/status_matchers.h"
 #include "absl/strings/string_view.h"
@@ -43,8 +45,15 @@ TEST_F(ObjectRepro353688666IntegrationTest, ReadManyRanges) {
       GetEnv("GOOGLE_CLOUD_CPP_STORAGE_TEST_BUCKET_NAME").value_or("");
   ASSERT_THAT(bucket_name, Not(IsEmpty()))
       << "GOOGLE_CLOUD_CPP_STORAGE_TEST_BUCKET_NAME is not set";
+  auto const project_id = GetEnv("GOOGLE_CLOUD_PROJECT").value_or("");
+  ASSERT_THAT(project_id, Not(IsEmpty())) << "GOOGLE_CLOUD_PROJECT is not set";
 
-  auto client = storage_experimental::DefaultGrpcClient(MakeTestOptions());
+  auto configuration =
+      google::cloud::otel::ConfigureBasicTracing(Project(project_id));
+
+  auto client = storage_experimental::DefaultGrpcClient(
+      Options{}.set<OpenTelemetryTracingOption>(true).set<RetryPolicyOption>(
+          LimitedErrorCountRetryPolicy(3).clone()));
   auto const object_name = MakeRandomObjectName();
   auto constexpr kMaxRangeSize = 4 * 1024 * 1024;
   auto constexpr kSize = 8 * kMaxRangeSize;
@@ -64,12 +73,13 @@ TEST_F(ObjectRepro353688666IntegrationTest, ReadManyRanges) {
   for (int i = 0; i != 1000; ++i) {
     if (i != 0 && i % 100 == 0) std::cerr << "iteration=" << i << std::endl;
     auto const begin = start_generator(generator);
-    auto const size =  size_generator(generator);
-    SCOPED_TRACE(absl::StrCat("Running iteration ", i, " size=", size, " begin=", begin));
+    auto const size = size_generator(generator);
+    SCOPED_TRACE(absl::StrCat("Running iteration ", i, " size=", size,
+                              " begin=", begin));
     std::string received;
     std::vector<char> buffer(128 * 1024);
-    auto is =
-        client.ReadObject(bucket_name, object_name, ReadRange(begin, begin + size));
+    auto is = client.ReadObject(bucket_name, object_name,
+                                ReadRange(begin, begin + size));
     while (!is.eof()) {
       is.read(buffer.data(), buffer.size());
       if (is.gcount() == 0) {
