@@ -52,10 +52,18 @@ TEST_F(ObjectRepro353688666IntegrationTest, ReadManyRanges) {
       google::cloud::otel::ConfigureBasicTracing(Project(project_id));
 
   auto client = storage_experimental::DefaultGrpcClient(
-      Options{}.set<OpenTelemetryTracingOption>(true).set<RetryPolicyOption>(
-          LimitedErrorCountRetryPolicy(3).clone()));
+      Options{}
+          .set<OpenTelemetryTracingOption>(true)
+          .set<RetryPolicyOption>(LimitedErrorCountRetryPolicy(10).clone())
+          .set<DownloadStallTimeoutOption>(std::chrono::seconds(5))
+          .set<TransferStallTimeoutOption>(std::chrono::seconds(30))
+          .set<IdempotencyPolicyOption>(AlwaysRetryIdempotencyPolicy().clone())
+          .set<BackoffPolicyOption>(
+              ExponentialBackoffPolicy(std::chrono::milliseconds(800),
+                                       std::chrono::minutes(5), 2.0)
+                  .clone()));
   auto const object_name = MakeRandomObjectName();
-  auto constexpr kMaxRangeSize = 4 * 1024 * 1024;
+  auto constexpr kMaxRangeSize = 8 * 1024 * 1024;
   auto constexpr kSize = 8 * kMaxRangeSize;
   auto const data = MakeRandomData(kSize);
   auto const view = absl::string_view(data);
@@ -70,28 +78,39 @@ TEST_F(ObjectRepro353688666IntegrationTest, ReadManyRanges) {
       std::uniform_int_distribution<std::int64_t>(0, kSize - kMaxRangeSize);
   auto size_generator =
       std::uniform_int_distribution<std::int64_t>(0, kMaxRangeSize - 1);
-  for (int i = 0; i != 1000; ++i) {
+
+  std::vector<std::thread> workers(128);
+  for (int i = 0; i != 1024; ++i) {
     if (i != 0 && i % 100 == 0) std::cerr << "iteration=" << i << std::endl;
-    auto const begin = start_generator(generator);
-    auto const size = size_generator(generator);
-    SCOPED_TRACE(absl::StrCat("Running iteration ", i, " size=", size,
-                              " begin=", begin));
-    std::string received;
-    std::vector<char> buffer(128 * 1024);
-    auto is = client.ReadObject(bucket_name, object_name,
-                                ReadRange(begin, begin + size));
-    while (!is.eof()) {
-      is.read(buffer.data(), buffer.size());
-      if (is.gcount() == 0) {
-        ASSERT_TRUE(is.eof());
-        continue;
-      }
-      received.append(buffer.begin(), std::next(buffer.begin(), is.gcount()));
-    }
-    EXPECT_FALSE(is.bad());
-    EXPECT_STATUS_OK(is.status());
-    ASSERT_THAT(size, Eq(received.size()));
-    EXPECT_THAT(view.substr(begin, size), Eq(received));
+
+    std::generate(workers.begin(), workers.end(), [&]() {
+      auto const begin = start_generator(generator);
+      auto const size = size_generator(generator);
+      return std::thread(
+          [&](std::int64_t begin, std::int64_t size) {
+            SCOPED_TRACE(absl::StrCat("Running iteration ", i, " size=", size,
+                                      " begin=", begin));
+            std::string received;
+            std::vector<char> buffer(128 * 1024);
+            auto is = client.ReadObject(bucket_name, object_name,
+                                        ReadRange(begin, begin + size));
+            while (!is.eof()) {
+              is.read(buffer.data(), buffer.size());
+              if (is.gcount() == 0) {
+                ASSERT_TRUE(is.eof());
+                continue;
+              }
+              received.append(buffer.begin(),
+                              std::next(buffer.begin(), is.gcount()));
+            }
+            EXPECT_FALSE(is.bad());
+            EXPECT_STATUS_OK(is.status());
+            ASSERT_THAT(size, Eq(received.size()));
+            EXPECT_THAT(view.substr(begin, size), Eq(received));
+          },
+          begin, size);
+    });
+    for (auto& t : workers) t.join();
   }
 }
 
