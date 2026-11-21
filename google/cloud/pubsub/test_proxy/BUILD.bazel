@@ -1,0 +1,119 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Conformance test proxy for the Cloud Pub/Sub C++ client library."""
+
+load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
+load("@grpc//bazel:cc_grpc_library.bzl", "cc_grpc_library")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
+package(default_visibility = ["//visibility:private"])
+
+licenses(["notice"])  # Apache 2.0
+
+_LINKOPTS = select({
+    "@platforms//os:windows": [],
+    "//conditions:default": ["-lpthread"],
+})
+
+# Defines the Pub/Sub conformance proxy interface.
+proto_library(
+    name = "proxy_proto",
+    srcs = ["protos/proxy.proto"],
+    import_prefix = "pubsub/conformance/v1",
+    strip_import_prefix = "protos",
+    deps = ["@com_google_protobuf//:timestamp_proto"],
+)
+
+cc_proto_library(
+    name = "proxy_cc_proto",
+    visibility = ["//google/cloud/pubsub/test_proxy:__pkg__"],
+    deps = [":proxy_proto"],
+)
+
+cc_grpc_library(
+    name = "proxy_cc_grpc",
+    srcs = [":proxy_proto"],
+    grpc_only = True,
+    visibility = ["//google/cloud/pubsub/test_proxy:__pkg__"],
+    deps = [":proxy_cc_proto"],
+)
+
+cc_library(
+    name = "pubsub_test_proxy",
+    testonly = True,
+    srcs = [
+        "pubsub_test_proxy.cc",
+        "trace_exporter.cc",
+    ],
+    hdrs = [
+        "pubsub_test_proxy.h",
+        "trace_exporter.h",
+    ],
+    deps = [
+        ":proxy_cc_grpc",
+        ":proxy_cc_proto",
+        "//:common",
+        "//:grpc_utils",
+        "//google/cloud/pubsub:google_cloud_cpp_pubsub",
+        "@abseil-cpp//absl/strings",
+        "@com_google_protobuf//:protobuf",
+        "@opentelemetry-cpp//api",
+        "@opentelemetry-cpp//sdk/src/trace",
+        # Do not sort: grpc++ must come last
+        "@grpc//:grpc++",
+    ],
+)
+
+cc_binary(
+    name = "pubsub_test_proxy_main",
+    testonly = True,
+    srcs = ["pubsub_test_proxy_main.cc"],
+    linkopts = _LINKOPTS,
+    deps = [
+        ":pubsub_test_proxy",
+        "@abseil-cpp//absl/flags:flag",
+        "@abseil-cpp//absl/flags:parse",
+        "@abseil-cpp//absl/strings",
+        "@opentelemetry-cpp//sdk/src/trace",
+        # Do not sort: grpc++ must come last
+        "@grpc//:grpc++",
+    ],
+)
+
+cc_test(
+    name = "pubsub_test_proxy_test",
+    size = "medium",
+    timeout = "long",
+    srcs = ["pubsub_test_proxy_test.cc"],
+    linkopts = _LINKOPTS,
+    deps = [
+        ":proxy_cc_grpc",
+        ":proxy_cc_proto",
+        ":pubsub_test_proxy",
+        "//:common",
+        "//:grpc_utils",
+        "//google/cloud/pubsub:google_cloud_cpp_pubsub",
+        "//google/cloud/testing_util:google_cloud_cpp_testing_grpc_private",
+        "//google/cloud/testing_util:google_cloud_cpp_testing_private",
+        "@com_google_protobuf//:protobuf",
+        "@googleapis//google/pubsub/v1:pubsub_cc_grpc",
+        "@googletest//:gtest_main",
+        "@opentelemetry-cpp//api",
+        "@opentelemetry-cpp//sdk/src/trace",
+        # Do not sort: grpc++ must come last
+        "@grpc//:grpc++",
+    ],
+)

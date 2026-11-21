@@ -1,0 +1,592 @@
+// Copyright 2026 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package pubsub.conformance.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/googleapis/gapic-showcase/pubsub/conformance/proxypb;proxypb";
+
+// PubSubProxy drives a target Pub/Sub client library under test from the
+// standalone conformance harness in gapic-showcase.
+//
+// Startup & shutdown contract (out-of-band):
+//   - Proxy is launched with --port=<N> (0 requests an ephemeral port).
+//   - Proxy binds 127.0.0.1:<bound_port>, prints "READY 127.0.0.1:<bound_port>\n"
+//     to stdout and flushes immediately, then serves plaintext gRPC.
+//   - Implementations must configure gRPC MaxRecvMsgSize / MaxSendMsgSize to at
+//     least 32 MiB so >10 MB message rejection tests (PUB-06b) cross the proxy.
+service PubSubProxy {
+  // Reports client identity, supported capabilities, and default settings.
+  rpc GetCapabilities(GetCapabilitiesRequest) returns (GetCapabilitiesResponse);
+
+  // Clears any buffered OpenTelemetry spans in the proxy's synchronous exporter.
+  // Should return UNIMPLEMENTED or an empty success if supports_monitoring=false.
+  rpc ResetTraces(ResetTracesRequest) returns (ResetTracesResponse);
+
+  // Flushes and drains all OpenTelemetry spans captured since startup or the
+  // last ResetTraces/DrainTraces call.
+  rpc DrainTraces(DrainTracesRequest) returns (DrainTracesResponse);
+
+  // Creates a configured publisher targeting a topic and fake Pub/Sub endpoint.
+  rpc CreatePublisher(CreatePublisherRequest) returns (CreatePublisherResponse);
+
+  // Publishes a single message through the specified publisher.
+  // When async_fire=false (default), waits for publish completion and returns
+  // message_id or error_code/error_message. When async_fire=true, enqueues the
+  // message synchronously into the client library in deterministic call order
+  // and returns publish_token for AwaitPublish.
+  rpc Publish(PublishRequest) returns (PublishResponse);
+
+  // Awaits completion of a message previously enqueued with async_fire=true.
+  rpc AwaitPublish(AwaitPublishRequest) returns (PublishResponse);
+
+  // Flushes all pending buffered batches on the specified publisher.
+  rpc FlushPublisher(FlushPublisherRequest) returns (FlushPublisherResponse);
+
+  // Stops the publisher (draining pending messages and rejecting future
+  // Publish calls).
+  rpc StopPublisher(StopPublisherRequest) returns (StopPublisherResponse);
+
+  // Resumes publishing for a paused ordering key.
+  rpc ResumePublish(ResumePublishRequest) returns (ResumePublishResponse);
+
+  // Releases resources associated with the publisher and removes its handle.
+  rpc ClosePublisher(ClosePublisherRequest) returns (ClosePublisherResponse);
+
+  // Drives a streaming subscriber session interactively (or auto-settled).
+  // Harness sends StartSubscriberCommand first, then zero or more
+  // SettleMessageCommand / StopSubscriberCommand messages. Proxy must continue
+  // processing SettleMessageCommand messages after StopSubscriberCommand until
+  // shutdown completes and StoppedEvent is emitted.
+  rpc SubscriberSession(stream SubscriberCommand) returns (stream SubscriberEvent);
+
+  // Executes a synchronous unary Pull operation (for clients supporting it;
+  // others return gRPC UNIMPLEMENTED).
+  rpc UnaryPull(UnaryPullRequest) returns (UnaryPullResponse);
+
+  // Gracefully shuts down the proxy process.
+  rpc ShutdownProxy(ShutdownProxyRequest) returns (ShutdownProxyResponse);
+}
+
+// -----------------------------------------------------------------------------
+// Capabilities & Client Defaults
+// -----------------------------------------------------------------------------
+
+enum FlowControlLimitBehavior {
+  FLOW_CONTROL_LIMIT_BEHAVIOR_UNSPECIFIED = 0;
+  FLOW_CONTROL_LIMIT_BEHAVIOR_IGNORE = 1;
+  FLOW_CONTROL_LIMIT_BEHAVIOR_BLOCK = 2;
+  FLOW_CONTROL_LIMIT_BEHAVIOR_SIGNAL_ERROR = 3;
+}
+
+enum CompressionAlgorithm {
+  COMPRESSION_ALGORITHM_UNSPECIFIED = 0;
+  COMPRESSION_ALGORITHM_GZIP = 1;
+  COMPRESSION_ALGORITHM_DEFLATE = 2;
+}
+
+enum ShutdownBehavior {
+  SHUTDOWN_BEHAVIOR_UNSPECIFIED = 0;
+  SHUTDOWN_BEHAVIOR_WAIT_FOR_PROCESSING = 1;
+  SHUTDOWN_BEHAVIOR_NACK_IMMEDIATELY = 2;
+}
+
+message GetCapabilitiesRequest {}
+
+message GetCapabilitiesResponse {
+  // Identity metadata for reports and cross-client diffs.
+  string client_language = 1; // e.g., "go", "cpp", "rust"
+  string client_library = 2;  // e.g., "cloud.google.com/go/pubsub/v2"
+  string client_version = 3;  // e.g., version or commit SHA
+
+  // R2 gate: when true, harness resets/drains and asserts OTel TraceSpans.
+  bool supports_monitoring = 4;
+
+  // Data-plane feature support flags (gates UNSUPPORTED_BY_CLIENT vs FAIL).
+  bool supports_unary_pull = 5;
+  bool supports_blocking_publish = 6;
+  bool supports_publish_flow_control = 7;
+  bool supports_publish_compression = 8;
+  bool supports_publish_hedging = 9;
+  bool supports_ordering_opt_in = 10;
+  bool supports_subscriber_ordering = 11;
+  bool supports_keepalive = 12;
+  bool supports_eod_receipt_modack = 13;
+  bool supports_auto_nack_on_drop = 14;
+  bool supports_ack_with_result = 15;
+  bool supports_custom_retry_codes = 16;
+  bool supports_exactly_once_delivery = 17;
+  bool supports_per_stream_flow_control = 18;
+  bool supports_resume_publish = 19;
+  bool supports_shutdown_behavior = 20;
+  bool supports_shutdown_timeout = 21;
+
+  // Informational client library defaults for diff reporting.
+  ClientDefaults defaults = 22;
+}
+
+message ClientDefaults {
+  // Publisher defaults.
+  int64 publish_batch_count_threshold = 1;
+  int64 publish_batch_byte_threshold = 2;
+  int64 publish_max_request_bytes = 3;
+  int64 publish_batch_delay_ms = 4;
+  int64 publish_total_timeout_ms = 5;
+  int64 publish_flow_control_max_messages = 6; // -1 if unlimited
+  int64 publish_flow_control_max_bytes = 7;    // -1 if unlimited / disabled
+  FlowControlLimitBehavior publish_flow_control_behavior = 8;
+  bool publish_compression_enabled_by_default = 9;
+  int64 publish_compression_bytes_threshold = 10;
+  CompressionAlgorithm publish_compression_algorithm = 11;
+  int64 publish_hedging_delay_ms = 12;
+  int64 publish_hedging_max_tokens = 13;
+  double publish_hedging_refill_ratio = 14;
+
+  // Subscriber defaults.
+  int64 subscriber_max_outstanding_messages = 15;
+  int64 subscriber_max_outstanding_bytes = 16;
+  int64 subscriber_max_extension_ms = 17; // 0 if unlimited (C++), >0 otherwise
+  int64 subscriber_min_ack_extension_ms = 18;
+  int64 subscriber_max_ack_extension_ms = 19;
+  bool subscriber_adaptive_ack_extension = 20;
+  bool subscriber_per_stream_flow_control = 21;
+  int32 subscriber_default_stream_ack_deadline_seconds = 22;
+  int64 keepalive_ping_interval_ms = 23;
+  int64 keepalive_pong_timeout_ms = 24;
+
+  // Retry defaults.
+  int64 retry_initial_delay_ms = 25;
+  int64 retry_max_delay_ms = 26;
+  double retry_delay_multiplier = 27;
+}
+
+// -----------------------------------------------------------------------------
+// OpenTelemetry Trace Capture
+// -----------------------------------------------------------------------------
+
+message ResetTracesRequest {}
+message ResetTracesResponse {}
+
+message DrainTracesRequest {}
+message DrainTracesResponse {
+  repeated TraceSpan spans = 1;
+}
+
+enum SpanKind {
+  SPAN_KIND_UNSPECIFIED = 0;
+  SPAN_KIND_INTERNAL = 1;
+  SPAN_KIND_SERVER = 2;
+  SPAN_KIND_CLIENT = 3;
+  SPAN_KIND_PRODUCER = 4;
+  SPAN_KIND_CONSUMER = 5;
+}
+
+// Matches OTLP / C++ Span StatusCode (NOTE: Go otel/codes swaps Ok=2/Error=1,
+// so Go proxy must map explicitly rather than casting).
+enum SpanStatusCode {
+  SPAN_STATUS_CODE_UNSET = 0;
+  SPAN_STATUS_CODE_OK = 1;
+  SPAN_STATUS_CODE_ERROR = 2;
+}
+
+message StringList {
+  repeated string values = 1;
+}
+
+message Int64List {
+  repeated int64 values = 1;
+}
+
+message DoubleList {
+  repeated double values = 1;
+}
+
+message BoolList {
+  repeated bool values = 1;
+}
+
+message AttributeValue {
+  oneof value {
+    string string_value = 1;
+    int64 int64_value = 2;
+    double double_value = 3;
+    bool bool_value = 4;
+    StringList string_list = 5;
+    Int64List int64_list = 6;
+    DoubleList double_list = 7;
+    BoolList bool_list = 8;
+  }
+}
+
+message SpanEvent {
+  string name = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  map<string, AttributeValue> attributes = 3;
+  uint32 dropped_attributes_count = 4;
+}
+
+message SpanLink {
+  string trace_id = 1; // 32 lowercase hex chars
+  string span_id = 2;  // 16 lowercase hex chars
+  string trace_state = 3;
+  uint32 trace_flags = 4;
+  map<string, AttributeValue> attributes = 5;
+  uint32 dropped_attributes_count = 6;
+}
+
+message TraceSpan {
+  string trace_id = 1;       // 32 lowercase hex chars
+  string span_id = 2;        // 16 lowercase hex chars
+  string parent_span_id = 3; // 16 lowercase hex chars, empty if root span
+  uint32 trace_flags = 4;
+  string trace_state = 5;
+  string name = 6;
+  SpanKind kind = 7;
+  google.protobuf.Timestamp start_time = 8;
+  google.protobuf.Timestamp end_time = 9;
+  map<string, AttributeValue> attributes = 10;
+  repeated SpanEvent events = 11;
+  repeated SpanLink links = 12;
+  SpanStatusCode status_code = 13;
+  string status_message = 14;
+  string instrumentation_scope_name = 15;
+  string instrumentation_scope_version = 16;
+  int32 child_span_count = 17;
+  uint32 dropped_attributes_count = 18;
+  uint32 dropped_events_count = 19;
+  uint32 dropped_links_count = 20;
+}
+
+// -----------------------------------------------------------------------------
+// Publisher Lifecycle & Data Plane
+// -----------------------------------------------------------------------------
+
+message HedgingSettings {
+  bool enabled = 1;
+  optional int64 delay_ms = 2;
+  optional int64 max_tokens = 3;
+  optional double refill_ratio = 4;
+}
+
+message CreatePublisherRequest {
+  // Fake Pub/Sub gRPC endpoint as host:port (e.g., "127.0.0.1:43210").
+  string endpoint = 1;
+  // Full topic name ("projects/{p}/topics/{t}") or short topic ID if project_id set.
+  string topic = 2;
+  // Optional project ID override; derived from topic if omitted.
+  string project_id = 3;
+  // Enable client-side OpenTelemetry tracing when supported.
+  bool enable_monitoring = 4;
+
+  // Ordering opt-in; unset leaves the client library's default unchanged.
+  optional bool enable_message_ordering = 5;
+
+  // Batching settings; unset leaves client defaults unchanged.
+  optional int64 count_threshold = 6;
+  optional int64 byte_threshold = 7;
+  optional int64 delay_threshold_ms = 8;
+  optional int32 num_workers = 9;
+
+  // Flow control settings; unset leaves client defaults unchanged.
+  optional int64 max_outstanding_messages = 10;
+  optional int64 max_outstanding_bytes = 11;
+  FlowControlLimitBehavior limit_exceeded_behavior = 12;
+
+  // Compression settings; unset leaves client defaults unchanged.
+  optional bool enable_compression = 13;
+  optional int64 compression_bytes_threshold = 14;
+  CompressionAlgorithm compression_algorithm = 15;
+
+  // Publish hedging settings (Go/Rust).
+  HedgingSettings hedging = 16;
+
+  // Retry & timeout settings; unset leaves client defaults unchanged.
+  optional int64 total_timeout_ms = 17;
+  // Canonical gRPC status codes (e.g. 14=UNAVAILABLE, 15=DATA_LOSS).
+  repeated int32 retry_codes = 18;
+  optional int64 initial_retry_delay_ms = 19;
+  optional int64 max_retry_delay_ms = 20;
+  optional double retry_delay_multiplier = 21;
+  optional int32 max_attempts = 22;
+
+  // Optional transport / emulator / metadata overrides (CFG-01, CFG-02).
+  bool use_emulator_env = 23;
+  string client_id = 24;
+  map<string, string> custom_headers = 25;
+}
+
+message CreatePublisherResponse {
+  string publisher_id = 1;
+}
+
+// Raw byte key/value attribute pair used to test non-UTF-8 attribute rejection
+// (PUB-02) across Proto3 string boundaries.
+message RawAttribute {
+  bytes key = 1;
+  bytes value = 2;
+}
+
+message PublishRequest {
+  string publisher_id = 1;
+  bytes data = 2;
+  map<string, string> attributes = 3;
+  string ordering_key = 4;
+
+  // Optional W3C trace context injected as active parent span during Publish.
+  string parent_traceparent = 5;
+  string parent_tracestate = 6;
+
+  // Use synchronous BlockingPublisher if supported (else UNIMPLEMENTED).
+  bool use_blocking_publisher = 7;
+
+  // When false (default), blocks until publish future resolves.
+  // When true, calls client Publish synchronously and returns publish_token.
+  bool async_fire = 8;
+
+  // If true, proxy verifies caller's attribute map was not mutated (TRAC-01).
+  bool verify_attributes_immutability = 9;
+
+  // Optional non-UTF-8 raw attributes merged/checked before calling Publish.
+  repeated RawAttribute raw_attributes = 10;
+}
+
+message AwaitPublishRequest {
+  string publisher_id = 1;
+  string publish_token = 2;
+}
+
+message PublishResponse {
+  string message_id = 1;
+  // 0 = OK, otherwise canonical gRPC code (or 2=UNKNOWN for client-only errors).
+  int32 error_code = 2;
+  string error_message = 3;
+  // Populated when PublishRequest.async_fire=true.
+  string publish_token = 4;
+  // True if verify_attributes_immutability detected caller map mutation.
+  bool caller_attributes_mutated = 5;
+}
+
+message FlushPublisherRequest {
+  string publisher_id = 1;
+}
+message FlushPublisherResponse {}
+
+message StopPublisherRequest {
+  string publisher_id = 1;
+}
+message StopPublisherResponse {}
+
+message ResumePublishRequest {
+  string publisher_id = 1;
+  string ordering_key = 2;
+}
+message ResumePublishResponse {}
+
+message ClosePublisherRequest {
+  string publisher_id = 1;
+}
+message ClosePublisherResponse {}
+
+// -----------------------------------------------------------------------------
+// Subscriber Streaming Session & Unary Pull
+// -----------------------------------------------------------------------------
+
+message StartSubscriberCommand {
+  string endpoint = 1;
+  string subscription = 2;
+  string project_id = 3;
+  bool use_emulator_env = 4;
+  bool enable_monitoring = 5;
+
+  // Selects C++ ExactlyOnceSubscribe overload when true.
+  bool use_exactly_once = 6;
+
+  // Flow control & concurrency settings; unset leaves client defaults unchanged.
+  optional int64 max_outstanding_messages = 7;
+  optional int64 max_outstanding_bytes = 8;
+  optional bool enable_per_stream_flow_control = 9;
+  optional int32 max_concurrency = 10;
+  optional int32 num_streams = 11;
+
+  // Lease extension & expiration settings; unset leaves client defaults unchanged.
+  optional int64 max_extension_ms = 12;
+  optional int64 min_duration_per_ack_extension_ms = 13;
+  optional int64 max_duration_per_ack_extension_ms = 14;
+
+  // Shutdown configuration; unset leaves client defaults unchanged.
+  ShutdownBehavior shutdown_behavior = 15;
+  optional int64 shutdown_timeout_ms = 16;
+
+  enum AutoSettleMode {
+    AUTO_SETTLE_MODE_UNSPECIFIED = 0; // Same as INTERACTIVE
+    AUTO_SETTLE_MODE_INTERACTIVE = 1;
+    AUTO_SETTLE_MODE_AUTO_ACK = 2;
+    AUTO_SETTLE_MODE_AUTO_NACK = 3;
+    AUTO_SETTLE_MODE_AUTO_ACK_WITH_RESULT = 4;
+    AUTO_SETTLE_MODE_AUTO_NACK_WITH_RESULT = 5;
+    AUTO_SETTLE_MODE_AUTO_DROP_WITHOUT_SETTLE = 6;
+  }
+  AutoSettleMode auto_settle_mode = 17;
+
+  // Optional retry/polling overrides.
+  repeated int32 retry_codes = 18;
+  optional int64 initial_retry_delay_ms = 19;
+  optional int64 max_retry_delay_ms = 20;
+  optional double retry_delay_multiplier = 21;
+  optional int64 shutdown_polling_period_ms = 22;
+
+  map<string, string> custom_headers = 23;
+  string client_id = 24;
+}
+
+message SettleMessageCommand {
+  enum SettleAction {
+    SETTLE_ACTION_UNSPECIFIED = 0;
+    SETTLE_ACTION_ACK = 1;
+    SETTLE_ACTION_NACK = 2;
+    SETTLE_ACTION_ACK_WITH_RESULT = 3;
+    SETTLE_ACTION_NACK_WITH_RESULT = 4;
+    // Returns from callback / drops message handler without calling Ack/Nack.
+    SETTLE_ACTION_RETURN_WITHOUT_SETTLE = 5;
+  }
+
+  string delivery_token = 1;
+  SettleAction action = 2;
+}
+
+message StopSubscriberCommand {
+  // Optional overrides; if UNSPECIFIED/unset, uses StartSubscriberCommand config.
+  ShutdownBehavior shutdown_behavior = 1;
+  optional int64 shutdown_timeout_ms = 2;
+}
+
+message SubscriberCommand {
+  oneof command {
+    StartSubscriberCommand start = 1;
+    SettleMessageCommand settle = 2;
+    StopSubscriberCommand stop = 3;
+  }
+}
+
+message StartedEvent {
+  // Library-generated client_id if accessible to the proxy.
+  string client_id = 1;
+}
+
+message MessageDeliveredEvent {
+  string delivery_token = 1;
+  string message_id = 2;
+  bytes data = 3;
+  map<string, string> attributes = 4;
+  string ordering_key = 5;
+  google.protobuf.Timestamp publish_time = 6;
+  int32 delivery_attempt = 7;
+  bool has_delivery_attempt = 8;
+  int32 active_callbacks = 9;
+  string callback_traceparent = 10;
+  string callback_tracestate = 11;
+  bool is_exactly_once = 12;
+  bool auto_settled = 13;
+}
+
+message SettlementResultEvent {
+  enum AckStatus {
+    ACK_STATUS_UNSPECIFIED = 0;
+    ACK_STATUS_SUCCESS = 1;
+    ACK_STATUS_PERMISSION_DENIED = 2;
+    ACK_STATUS_FAILED_PRECONDITION = 3;
+    ACK_STATUS_INVALID_ACK_ID = 4;
+    ACK_STATUS_OTHER = 5;
+    ACK_STATUS_UNAVAILABLE = 6;
+    ACK_STATUS_UNKNOWN = 7;
+  }
+
+  string delivery_token = 1;
+  AckStatus status = 2;
+  int32 grpc_error_code = 3;
+  string error_message = 4;
+  bool is_nack = 5;
+}
+
+message StoppedEvent {
+  int32 error_code = 1;
+  string error_message = 2;
+  int64 total_delivered = 3;
+}
+
+message SubscriberEvent {
+  oneof event {
+    StartedEvent started = 1;
+    MessageDeliveredEvent message_delivered = 2;
+    SettlementResultEvent settlement_result = 3;
+    StoppedEvent stopped = 4;
+  }
+}
+
+message UnaryPullRequest {
+  string endpoint = 1;
+  string subscription = 2;
+  string project_id = 3;
+  bool use_emulator_env = 4;
+  bool enable_monitoring = 5;
+  int32 max_messages = 6;
+  bool return_immediately = 7;
+  SettleMessageCommand.SettleAction settle_action = 8;
+  // Time to hold message before executing settle_action (tests pull lease extension).
+  optional int64 lease_extension_ms = 9;
+  optional int64 max_extension_ms = 10;
+  optional int64 min_duration_per_ack_extension_ms = 11;
+  optional int64 max_duration_per_ack_extension_ms = 12;
+
+  repeated int32 retry_codes = 13;
+  optional int64 total_timeout_ms = 14;
+  optional int64 initial_retry_delay_ms = 15;
+  optional int64 max_retry_delay_ms = 16;
+  optional double retry_delay_multiplier = 17;
+  optional int32 max_attempts = 18;
+  string client_id = 19;
+  map<string, string> custom_headers = 20;
+}
+
+message UnaryPullResponse {
+  message PulledMessage {
+    string message_id = 1;
+    bytes data = 2;
+    map<string, string> attributes = 3;
+    string ordering_key = 4;
+    google.protobuf.Timestamp publish_time = 5;
+    int32 delivery_attempt = 6;
+    bool has_delivery_attempt = 7;
+    SettlementResultEvent.AckStatus settle_status = 8;
+    int32 settle_error_code = 9;
+    string settle_error_message = 10;
+  }
+
+  repeated PulledMessage messages = 1;
+  int32 error_code = 2;
+  string error_message = 3;
+}
+
+// -----------------------------------------------------------------------------
+// Proxy Shutdown
+// -----------------------------------------------------------------------------
+
+message ShutdownProxyRequest {
+  int64 grace_period_ms = 1;
+}
+
+message ShutdownProxyResponse {}
